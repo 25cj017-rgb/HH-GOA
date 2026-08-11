@@ -1,0 +1,47 @@
+Here's your tight 2-minute script — covers everything, stays shallow:
+
+🎬 TYVORA SECURE — 2 MINUTE SCRIPT
+
+[0:00 – 0:10] | 🎥 ON CAMERA
+"Hi, I'm [Name]. This is Tyvora Secure — an air-gapped predictive copilot for MPLS and SD-WAN networks built for defense and government environments where cloud AI is completely prohibited."
+
+[0:10 – 0:28] | 🎥 ON CAMERA — Problem
+"The problem — today's NOCs are fully reactive. Alerts only fire after a failure has already happened. No warning. No lead time. No explanation. And in secure environments, operators can't use any cloud AI tool. They're working blind, under pressure, every single day."
+
+[0:28 – 0:50] | 🖥️ SCREEN — Solution + Architecture
+
+Show architecture diagram
+
+"Tyvora Secure fixes this with four layers.
+One — a Predictive Engine using LSTM and Prophet models that detects failure precursors 300 seconds before impact.
+Two — an Offline LLM Copilot running Llama 3 locally — explains root cause in plain English, zero internet.
+Three — the Deterministic Validation Layer — a hard-coded safety gatekeeper that blocks any unsafe AI recommendation before the operator sees it. This is our Glass Box moat.
+Four — a 3D Spatial Threat Map giving operators a God-View of the entire network in real time."
+
+[0:50 – 1:10] | 🖥️ SCREEN — Live Demo
+
+Show: Globe rotating → fault injected → node turns orange → copilot response fires
+
+"Here's the demo. I'm injecting a BGP route flap into our simulated network. The predictive engine catches it 300 seconds early. The node flags on the 3D map. The offline copilot instantly generates — predicted issue, confidence score, root cause, and ranked remediation actions. All offline. All within the air-gapped boundary."
+
+[1:10 – 1:22] | 🖥️ SCREEN — Tech Stack
+
+Show: Tech stack slide or poster
+
+"Stack — GNS3 for simulation, Telegraf and Kafka for telemetry, PyTorch for ML, Llama 3 via llama.cpp for inference, ChromaDB and LangChain for RAG, React and Three.js for the 3D UI. Hundred percent open source. Zero cloud."
+
+[1:22 – 1:40] | 🎥 ON CAMERA — Impact + Future
+"Real world impact — it protects critical infrastructure, auto-generates CDM-compliant audit reports, costs zero in software licensing, and eliminates cloud energy costs entirely.
+Next — we're building autonomous remediation and expanding to satellite and tactical radio networks for defense deployments."
+
+[1:40 – 1:52] | 🎥 ON CAMERA — Close
+"Tyvora Secure is not a student project. It's a hardened infrastructure utility for environments where AI has never been trusted before — because we built the only architecture that makes it trustworthy."
+
+[1:52 – 2:00] | 🖥️ SCREEN — Logo Hold
+
+Tyvora logo full screen
+
+"Glass Box. Zero Egress. 300 seconds ahead."
+
+⏱️ Timing Summary
+SegmentTimeFormatIntro0:00–0:10On CameraProblem0:10–0:28On CameraSolution (4 layers)0:28–0:50ScreenLive Demo0:50–1:10ScreenTech Stack1:10–1:22ScreenImpact + Future1:22–1:40On CameraClose1:40–1:52On CameraLogo Hold1:52–2:00Screen
