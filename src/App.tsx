@@ -68,7 +68,7 @@ const FONTS = [
 
 export default function App() {
   const [format, setFormat] = useState<'pfp' | 'badge'>('badge');
-  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [, setImageSrc] = useState<string | null>(null);
   const [imageElement, setImageElement] = useState<HTMLImageElement | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 

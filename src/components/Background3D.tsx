@@ -9,7 +9,8 @@ const ParallaxImage = () => {
   const { viewport } = useThree();
 
   // Calculate the scale to cover the viewport while maintaining aspect ratio
-  const imageAspect = texture.image.width / texture.image.height;
+  const img = texture.image as HTMLImageElement;
+  const imageAspect = img.width / img.height;
   const viewportAspect = viewport.width / viewport.height;
   
   let scaleX = viewport.width;
