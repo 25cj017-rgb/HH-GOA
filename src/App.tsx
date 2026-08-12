@@ -6,13 +6,14 @@ import {
   RefreshCw, 
   Check, 
   Link as LinkIcon,
-  Camera
+  Camera,
+  Palette
 } from 'lucide-react';
-import { ImageAdjuster } from './components/ImageAdjuster';
-import { drawPFPFrame, drawIDBadge } from './utils/canvasRenderer';
+import { drawPFPFrame, drawIDBadge, type ThemeSettings } from './utils/canvasRenderer';
 import confetti from 'canvas-confetti';
 import { CameraCaptureModal } from './components/CameraCaptureModal';
 import { DownloadSuccessModal } from './components/DownloadSuccessModal';
+import { Background3D } from './components/Background3D';
 
 const DEMO_AVATARS = [
   {
@@ -51,80 +52,87 @@ const BUILDER_CLASSES = [
   'Hype Engineer'
 ];
 
+const THEMES = [
+  { name: 'Goa Retro', bg: '#0F2E1E', primary: '#F6EAD8', accent: '#DE612F' },
+  { name: 'Cyberpunk', bg: '#1A1A2E', primary: '#E94560', accent: '#0F3460' },
+  { name: 'Midnight', bg: '#0B0C10', primary: '#66FCF1', accent: '#45A29E' },
+  { name: 'Vaporwave', bg: '#2B0F4C', primary: '#FF71CE', accent: '#01CDFE' },
+  { name: 'Minimal', bg: '#FDFBF7', primary: '#2D4263', accent: '#C84B31' }
+];
+
+const FONTS = [
+  { name: 'Monospace Retro', value: 'monospace' },
+  { name: 'Space Grotesk', value: '"Space Grotesk", sans-serif' },
+  { name: 'Anton Block', value: '"Anton", sans-serif' }
+];
+
 export default function App() {
-  // Generator Mode State
   const [format, setFormat] = useState<'pfp' | 'badge'>('badge');
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [imageElement, setImageElement] = useState<HTMLImageElement | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Crop / Adjuster State
-  const [zoom, setZoom] = useState(1);
-  const [rotation, setRotation] = useState(0);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  // Customization Session State
+  const [selectedThemeIdx, setSelectedThemeIdx] = useState(0);
+  const [selectedFontIdx, setSelectedFontIdx] = useState(0);
 
-  // Customization Form State
+  // Form State
   const [name, setName] = useState('Atul Gangwar');
   const [role, setRole] = useState('Software Developer');
   const [builderClass, setBuilderClass] = useState('Terminal Wizard');
   const [skills, setSkills] = useState('Rust, Go, Web3');
   const [badgeId, setBadgeId] = useState('#HH26-5703');
   
-  // QR code state
   const [qrLink, setQrLink] = useState('https://hhgoa.com');
   const [qrImageElement, setQrImageElement] = useState<HTMLImageElement | null>(null);
 
-  // Canvas Reference
+  // References
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  // Camera Access State & Ref
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const previewRef = useRef<HTMLDivElement>(null);
   const cameraFallbackInputRef = useRef<HTMLInputElement>(null);
 
-  // Trigger hidden input capture="user" on mobile if WebRTC is not supported or failed
+  // States for Camera & Modals
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [downloadImageUrl, setDownloadImageUrl] = useState<string | null>(null);
+  const [downloadFilename, setDownloadFilename] = useState<string>('');
+  
+  // Twitter Gate
+  const [hasSharedToX, setHasSharedToX] = useState(false);
+
+  const scrollToPreview = () => {
+    if (window.innerWidth < 1024 && previewRef.current) {
+      previewRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   const triggerNativeCamera = () => {
     if (cameraFallbackInputRef.current) {
       cameraFallbackInputRef.current.click();
     }
   };
 
-  // Download Success Modal states
-  const [downloadImageUrl, setDownloadImageUrl] = useState<string | null>(null);
-  const [downloadFilename, setDownloadFilename] = useState<string>('');
-
-  // Initialize with first demo avatar
   useEffect(() => {
     loadDemoAvatar(0);
   }, []);
 
-  // Fetch QR Code dynamically
   useEffect(() => {
     if (!qrLink.trim()) {
       setQrImageElement(null);
       return;
     }
-
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      setQrImageElement(img);
-    };
-    img.onerror = () => {
-      setQrImageElement(null);
-    };
+    img.onload = () => setQrImageElement(img);
+    img.onerror = () => setQrImageElement(null);
     img.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrLink.trim())}`;
   }, [qrLink]);
 
-  // Update canvas render on state changes
   useEffect(() => {
     renderCanvas();
-    
     if (document.fonts) {
-      document.fonts.ready.then(() => {
-        renderCanvas();
-      });
+      document.fonts.ready.then(() => renderCanvas());
     }
-  }, [format, imageElement, zoom, rotation, offset, name, role, builderClass, skills, badgeId, qrImageElement]);
+  }, [format, imageElement, name, role, builderClass, skills, badgeId, qrImageElement, selectedThemeIdx, selectedFontIdx]);
 
   const loadDemoAvatar = (index: number) => {
     setIsLoading(true);
@@ -140,10 +148,8 @@ export default function App() {
     img.onload = () => {
       setImageElement(img);
       setImageSrc(demo.src);
-      setZoom(1);
-      setRotation(0);
-      setOffset({ x: 0, y: 0 });
       setIsLoading(false);
+      scrollToPreview();
     };
     img.src = demo.src;
   };
@@ -152,21 +158,18 @@ export default function App() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const details = {
-      name,
-      role,
-      builderClass,
-      skills,
-      badgeId,
-      qrLink
+    const details = { name, role, builderClass, skills, badgeId, qrLink };
+    const themeSettings: ThemeSettings = {
+      bg: THEMES[selectedThemeIdx].bg,
+      primary: THEMES[selectedThemeIdx].primary,
+      accent: THEMES[selectedThemeIdx].accent,
+      font: FONTS[selectedFontIdx].value
     };
 
-    const transform = { zoom, rotation, offset };
-
     if (format === 'pfp') {
-      drawPFPFrame(canvas, imageElement, transform, details);
+      drawPFPFrame(canvas, imageElement, details, themeSettings);
     } else {
-      drawIDBadge(canvas, imageElement, transform, details, qrImageElement);
+      drawIDBadge(canvas, imageElement, details, qrImageElement, themeSettings);
     }
   };
 
@@ -177,17 +180,11 @@ export default function App() {
     setIsLoading(true);
     try {
       let processedFile: Blob = file;
-      
       if (file.name.toLowerCase().endsWith('.heic') || file.type === 'image/heic') {
         const heic2any = (await import('heic2any')).default;
-        const result = await heic2any({
-          blob: file,
-          toType: 'image/jpeg',
-          quality: 0.8,
-        });
+        const result = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 });
         processedFile = Array.isArray(result) ? result[0] : result;
       }
-
       const reader = new FileReader();
       reader.onload = (event) => {
         if (event.target?.result) {
@@ -195,10 +192,8 @@ export default function App() {
           img.onload = () => {
             setImageElement(img);
             setImageSrc(event.target!.result as string);
-            setZoom(1);
-            setRotation(0);
-            setOffset({ x: 0, y: 0 });
             setIsLoading(false);
+            scrollToPreview();
           };
           img.src = event.target.result as string;
         }
@@ -216,23 +211,20 @@ export default function App() {
     const randomId = `#HH26-${Math.floor(1000 + Math.random() * 9000)}`;
     setBuilderClass(randomClass);
     setBadgeId(randomId);
+    scrollToPreview();
   };
 
-  const handleDownload = () => {
+  const executeDownload = (showModal = true) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     try {
-      // 1. Generate the random filename (hh-goa-XXXXXX.png)
       const randomNum = Math.floor(100000 + Math.random() * 900000);
       const filename = `hh-goa-${randomNum}.png`;
       setDownloadFilename(filename);
 
-      // 2. Export as data URL (Base64) for maximum compatibility
       const dataUrl = canvas.toDataURL('image/png');
-      setDownloadImageUrl(dataUrl);
-
-      // 3. Trigger download using DOM-appended link
+      
       const link = document.createElement('a');
       link.download = filename;
       link.href = dataUrl;
@@ -240,11 +232,10 @@ export default function App() {
       link.click();
       document.body.removeChild(link);
 
-      confetti({
-        particleCount: 100,
-        spread: 60,
-        colors: ['#DE612F', '#0F2E1E', '#E5F085']
-      });
+      if (showModal) {
+        setDownloadImageUrl(dataUrl);
+        confetti({ particleCount: 100, spread: 60, colors: ['#DE612F', '#0F2E1E', '#E5F085'] });
+      }
     } catch (err) {
       console.error('Download generation error:', err);
       alert('Could not export image. The canvas may be tainted due to external image CORS restrictions.');
@@ -252,422 +243,420 @@ export default function App() {
   };
 
   const handleShareToX = () => {
+    // 1. Auto-download image so they have it ready to paste/attach
+    executeDownload(false);
+    
+    // 2. Unlock regular download button
+    setHasSharedToX(true);
+
+    // 3. Redirect to Twitter with text & hashtag
     const tweetText = `Just generated my Hacker House Goa 2026 ${
       format === 'pfp' ? 'PFP Frame' : 'Wanted Poster'
-    }! Ready to build in Goa, ship from paradise 🌴🚀\n\nCreate yours now at hhgoa.com! %23FrameInGoa`;
+    }! Ready to build in Goa, ship from paradise 🌴🚀\n\n%23FrameInGoa`;
     
     const xUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
-    window.open(xUrl, '_blank');
+    
+    // Slight delay so the download triggers before the window changes focus
+    setTimeout(() => {
+      window.open(xUrl, '_blank');
+    }, 500);
   };
 
   return (
-    <div className="min-h-screen bg-transparent text-[#0F2E1E] selection:bg-[#DE612F] selection:text-white pb-16 font-sans relative overflow-x-hidden">
-      
-      {/* HEADER SECTION */}
-      <header className="border-b-4 border-[#0F2E1E] bg-[#0F2E1E] py-6 px-4 sticky top-0 z-40 shadow-[0_4px_0_rgba(15,46,30,0.15)]">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-[#E5F085] border-3 border-[#0F2E1E] flex items-center justify-center font-anton text-[#0F2E1E] text-2xl shadow-[3px_3px_0px_#DE612F] transform -rotate-6">
-              HH
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-3xl md:text-4xl font-anton text-[#E5F085] uppercase tracking-tighter m-0 leading-none">
-                  HACKER HOUSE GOA 2026
-                </h1>
-                <span className="hidden sm:inline-block bg-[#DE612F] text-[#FDFBF7] text-[10px] font-mono font-bold px-2 py-0.5 rounded border-2 border-[#0F2E1E] shadow-[1px_1px_0_#0F2E1E]">
-                  PORTAL
-                </span>
-              </div>
-              <p className="text-xs text-[#E5F085]/80 font-mono mt-1">
-                BUILD IN GOA, SHIP FROM PARADISE • OFFICIAL PFP & WANTED POSTER GENERATOR
-              </p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <a
-              href="https://hhgoa.com"
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-1 text-xs font-mono font-bold text-[#FDFBF7] bg-[#DE612F] hover:bg-[#DE612F]/90 py-2.5 px-5 rounded-xl border-2 border-[#0F2E1E] shadow-[3px_3px_0px_#0F2E1E] hover:shadow-[1px_1px_0px_#0F2E1E] hover:translate-x-[2px] hover:translate-y-[2px] transition-all"
-            >
-              Official Website
-            </a>
-          </div>
-        </div>
-      </header>
-
-      {/* MAIN CONTAINER */}
-      <main className="max-w-6xl mx-auto px-4 mt-10">
+    <>
+      <Background3D />
+      <div className="min-h-screen bg-transparent text-[#0F2E1E] selection:bg-[#DE612F] selection:text-white pb-16 font-sans relative overflow-x-hidden z-10">
         
-        {/* Intro Tagline Card (ensures high contrast against the beach image) */}
-        <div className="text-center mb-10 flex flex-col items-center max-w-2xl mx-auto bg-[#FDFBF7] border-4 border-[#0F2E1E] p-6 rounded-2xl shadow-[6px_6px_0px_#0F2E1E] transform rotate-1">
-          <span className="text-4xl md:text-6xl font-anton uppercase tracking-tighter text-[#0F2E1E] select-none leading-none">
-            GENERATE IDENTITY
-          </span>
-          <p className="text-xs font-mono mt-1 text-[#0F2E1E]/70 font-bold uppercase tracking-wider">
-            WANTED: DEVELOPERS, DESIGNERS & SHITPOSTERS
-          </p>
-          <span className="bg-[#DE612F] text-[#FDFBF7] text-md font-bold font-mono px-4 py-1 rounded-lg border-3 border-[#0F2E1E] shadow-[2px_2px_0_#0F2E1E] transform -rotate-2 mt-3 select-none">
-            #FRAMEINGOA
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          
-          {/* LEFT COLUMN: EDITOR */}
-          <div className="lg:col-span-7 flex flex-col space-y-6">
-            
-            {/* 1. Upload Photo card */}
-            <section className="bg-[#FDFBF7] border-4 border-[#0F2E1E] p-6 rounded-2xl shadow-[6px_6px_0px_#0F2E1E] transition-all">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-md font-anton uppercase tracking-tight text-[#0F2E1E] flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-[#DE612F] text-[#FDFBF7] border-2 border-[#0F2E1E] flex items-center justify-center text-xs font-mono">1</span>
-                  UPLOAD BADGE PHOTO
-                </h3>
-                <span className="text-[10px] font-mono text-[#0F2E1E]/60">(JPG, PNG, HEIC)</span>
+        {/* HEADER SECTION */}
+        <header className="border-b-4 border-[#0F2E1E] bg-[#0F2E1E]/95 backdrop-blur py-6 px-4 sticky top-0 z-40 shadow-[0_4px_0_rgba(15,46,30,0.15)]">
+          <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-[#E5F085] border-3 border-[#0F2E1E] flex items-center justify-center font-anton text-[#0F2E1E] text-2xl shadow-[3px_3px_0px_#DE612F] transform -rotate-6">
+                HH
               </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-3xl md:text-4xl font-anton text-[#E5F085] uppercase tracking-tighter m-0 leading-none">
+                    HACKER HOUSE GOA 2026
+                  </h1>
+                  <span className="hidden sm:inline-block bg-[#DE612F] text-[#FDFBF7] text-[10px] font-mono font-bold px-2 py-0.5 rounded border-2 border-[#0F2E1E] shadow-[1px_1px_0_#0F2E1E]">
+                    PORTAL
+                  </span>
+                </div>
+                <p className="text-xs text-[#E5F085]/80 font-mono mt-1">
+                  BUILD IN GOA, SHIP FROM PARADISE • OFFICIAL PFP & WANTED POSTER GENERATOR
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <a
+                href="https://hhgoa.com"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-xs font-mono font-bold text-[#FDFBF7] bg-[#DE612F] hover:bg-[#DE612F]/90 py-2.5 px-5 rounded-xl border-2 border-[#0F2E1E] shadow-[3px_3px_0px_#0F2E1E] hover:shadow-[1px_1px_0px_#0F2E1E] hover:translate-x-[2px] hover:translate-y-[2px] transition-all"
+              >
+                Official Website
+              </a>
+            </div>
+          </div>
+        </header>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Upload Trigger Area */}
-                <div className="flex flex-col space-y-3">
-                  {/* Native Upload */}
-                  <label className="relative flex flex-col items-center justify-center p-4 border-4 border-dashed border-[#0F2E1E]/30 hover:border-[#DE612F] bg-[#E5F085]/10 hover:bg-[#E5F085]/20 rounded-xl cursor-pointer transition-all group">
-                    <input
-                      type="file"
-                      accept="image/*,.heic"
-                      onChange={handleImageUpload}
-                      className="hidden"
-                    />
-                    <Upload className="w-6 h-6 text-[#0F2E1E]/60 group-hover:text-[#DE612F] transition-all mb-1" />
-                    <span className="text-xs font-mono font-bold text-[#0F2E1E] group-hover:text-[#DE612F]">
-                      {isLoading ? 'Processing...' : 'Upload Photo'}
+        {/* MAIN CONTAINER */}
+        <main className="max-w-6xl mx-auto px-4 mt-10">
+          
+          {/* Intro Tagline Card */}
+          <div className="text-center mb-10 flex flex-col items-center max-w-2xl mx-auto bg-[#FDFBF7] border-4 border-[#0F2E1E] p-6 rounded-2xl shadow-[6px_6px_0px_#0F2E1E] transform rotate-1">
+            <span className="text-4xl md:text-6xl font-anton uppercase tracking-tighter text-[#0F2E1E] select-none leading-none">
+              GENERATE IDENTITY
+            </span>
+            <p className="text-xs font-mono mt-1 text-[#0F2E1E]/70 font-bold uppercase tracking-wider">
+              WANTED: DEVELOPERS, DESIGNERS & SHITPOSTERS
+            </p>
+            <span className="bg-[#DE612F] text-[#FDFBF7] text-md font-bold font-mono px-4 py-1 rounded-lg border-3 border-[#0F2E1E] shadow-[2px_2px_0_#0F2E1E] transform -rotate-2 mt-3 select-none">
+              #FrameInGoa
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            
+            {/* LEFT COLUMN: EDITOR */}
+            <div className="lg:col-span-7 flex flex-col space-y-6">
+              
+              {/* 1. Upload Photo card */}
+              <section className="bg-[#FDFBF7] border-4 border-[#0F2E1E] p-6 rounded-2xl shadow-[6px_6px_0px_#0F2E1E] transition-all">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-md font-anton uppercase tracking-tight text-[#0F2E1E] flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-[#DE612F] text-[#FDFBF7] border-2 border-[#0F2E1E] flex items-center justify-center text-xs font-mono">1</span>
+                    UPLOAD BADGE PHOTO
+                  </h3>
+                  <span className="text-[10px] font-mono text-[#0F2E1E]/60">(Auto-cropping enabled)</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex flex-col space-y-3">
+                    <label className="relative flex flex-col items-center justify-center p-4 border-4 border-dashed border-[#0F2E1E]/30 hover:border-[#DE612F] bg-[#E5F085]/10 hover:bg-[#E5F085]/20 rounded-xl cursor-pointer transition-all group">
+                      <input type="file" accept="image/*,.heic" onChange={handleImageUpload} className="hidden" />
+                      <Upload className="w-6 h-6 text-[#0F2E1E]/60 group-hover:text-[#DE612F] transition-all mb-1" />
+                      <span className="text-xs font-mono font-bold text-[#0F2E1E] group-hover:text-[#DE612F]">
+                        {isLoading ? 'Processing...' : 'Upload Photo'}
+                      </span>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+                        if (isMobile) {
+                          triggerNativeCamera();
+                        } else {
+                          const hasWebRTC = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+                          if (hasWebRTC) setIsCameraOpen(true);
+                          else alert("Camera access blocked. Try uploading a file.");
+                        }
+                      }}
+                      className="flex items-center justify-center gap-2 py-3 px-4 bg-[#E5F085] hover:bg-[#DE612F] text-[#0F2E1E] hover:text-[#FDFBF7] font-anton uppercase tracking-wider text-sm rounded-xl border-3 border-[#0F2E1E] shadow-[3px_3px_0px_#0F2E1E] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0px_#0F2E1E] transition-all"
+                    >
+                      <Camera className="w-4 h-4" />
+                      Take Live Photo
+                    </button>
+
+                    <input ref={cameraFallbackInputRef} type="file" accept="image/*" capture="user" onChange={handleImageUpload} className="hidden" />
+                  </div>
+
+                  <div className="flex flex-col justify-center space-y-3 bg-[#E5F085]/30 p-4 rounded-xl border-2 border-[#0F2E1E]/10">
+                    <span className="text-[11px] font-mono text-[#0F2E1E] uppercase tracking-wider font-bold">
+                      💡 Try 1-Click Demo Avatar:
                     </span>
-                    <span className="text-[9px] text-[#0F2E1E]/50 font-mono">JPG, PNG, HEIC</span>
-                  </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {DEMO_AVATARS.map((avatar, idx) => (
+                        <button key={idx} onClick={() => loadDemoAvatar(idx)} className="flex flex-col items-center p-2 rounded-lg bg-[#FDFBF7] hover:bg-[#E5F085] border-2 border-[#0F2E1E]/30 hover:border-[#0F2E1E] transition-all">
+                          <div className="w-10 h-10 rounded-full overflow-hidden mb-1.5 border-2 border-[#0F2E1E]/50">
+                            <img src={avatar.src} alt={avatar.name} className="w-full h-full object-cover" />
+                          </div>
+                          <span className="text-[9px] font-mono text-[#0F2E1E] font-bold truncate w-full text-center">
+                            {avatar.name.split(' ')[0]}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </section>
 
-                  {/* Camera Shutter Trigger */}
+              {/* Customization Session */}
+              <section className="bg-[#FDFBF7] border-4 border-[#0F2E1E] p-6 rounded-2xl shadow-[6px_6px_0px_#0F2E1E] transition-all">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-md font-anton uppercase tracking-tight text-[#0F2E1E] flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-[#DE612F] text-[#FDFBF7] border-2 border-[#0F2E1E] flex items-center justify-center text-xs font-mono"><Palette className="w-3.5 h-3.5" /></span>
+                    CUSTOMIZATION
+                  </h3>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold mb-2 block">Color Palette</label>
+                    <div className="flex flex-wrap gap-2">
+                      {THEMES.map((t, idx) => (
+                        <button 
+                          key={idx} 
+                          onClick={() => { setSelectedThemeIdx(idx); scrollToPreview(); }}
+                          className={`px-3 py-1.5 rounded-lg border-2 font-mono text-xs font-bold transition-all flex items-center gap-2 ${selectedThemeIdx === idx ? 'border-[#0F2E1E] shadow-[2px_2px_0px_#0F2E1E] -translate-y-[2px]' : 'border-transparent opacity-70 hover:opacity-100'}`}
+                          style={{ backgroundColor: t.bg, color: t.primary }}
+                        >
+                          <span className="w-3 h-3 rounded-full border border-current" style={{ backgroundColor: t.accent }}></span>
+                          {t.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold mb-2 block">Typography</label>
+                    <div className="flex flex-wrap gap-2">
+                      {FONTS.map((f, idx) => (
+                        <button 
+                          key={idx} 
+                          onClick={() => { setSelectedFontIdx(idx); scrollToPreview(); }}
+                          className={`px-3 py-1.5 rounded-lg border-2 font-mono text-xs font-bold transition-all ${selectedFontIdx === idx ? 'border-[#0F2E1E] bg-[#DE612F] text-white shadow-[2px_2px_0px_#0F2E1E]' : 'border-[#0F2E1E]/20 text-[#0F2E1E] hover:border-[#0F2E1E]/50'}`}
+                        >
+                          {f.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* 2. Format Selector card */}
+              <section className="bg-[#FDFBF7] border-4 border-[#0F2E1E] p-6 rounded-2xl shadow-[6px_6px_0px_#0F2E1E] transition-all">
+                <h3 className="text-md font-anton uppercase tracking-tight text-[#0F2E1E] flex items-center gap-2 mb-4">
+                  <span className="w-6 h-6 rounded-full bg-[#DE612F] text-[#FDFBF7] border-2 border-[#0F2E1E] flex items-center justify-center text-xs font-mono">2</span>
+                  CHOOSE TEMPLATE FORMAT
+                </h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <button
                     type="button"
-                    onClick={() => {
-                      // Detect WebRTC support
-                      const hasWebRTC = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-                      if (hasWebRTC) {
-                        setIsCameraOpen(true);
-                      } else {
-                        // Check if the user is on a mobile device or desktop
-                        const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-                        if (!isMobile) {
-                          alert(
-                            "Camera access requires a secure connection (HTTPS) or running on localhost.\n\n" +
-                            "Please make sure to open the HTTPS version of the link (e.g., https://172.100.35.119:5173/) " +
-                            "in your browser to use your webcam directly, or choose a file from the explorer."
-                          );
-                        }
-                        // Fallback directly to native device camera on unsupported browsers/phones
-                        triggerNativeCamera();
-                      }
-                    }}
-                    className="flex items-center justify-center gap-2 py-3 px-4 bg-[#E5F085] hover:bg-[#DE612F] text-[#0F2E1E] hover:text-[#FDFBF7] font-anton uppercase tracking-wider text-sm rounded-xl border-3 border-[#0F2E1E] shadow-[3px_3px_0px_#0F2E1E] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0px_#0F2E1E] transition-all"
+                    onClick={() => { setFormat('badge'); scrollToPreview(); }}
+                    className={`flex flex-col items-start p-4 rounded-xl border-3 text-left transition-all ${
+                      format === 'badge' ? 'border-[#0F2E1E] bg-[#DE612F] text-[#FDFBF7] shadow-[3px_3px_0_#0F2E1E]' : 'border-[#0F2E1E]/30 bg-[#FDFBF7] hover:bg-[#E5F085]/20 text-[#0F2E1E]/70'
+                    }`}
                   >
-                    <Camera className="w-4 h-4" />
-                    Take Live Photo
+                    <span className="font-bold text-sm tracking-tight font-mono flex items-center gap-1.5">
+                      Format B: Wanted Poster
+                      {format === 'badge' && <Check className="w-4 h-4 text-[#E5F085]" />}
+                    </span>
+                    <span className={`text-[11px] font-mono mt-1 leading-normal ${format === 'badge' ? 'text-[#FDFBF7]/90' : 'text-[#0F2E1E]/50'}`}>
+                      Retro wanted poster featuring your photo as a sepia-toned mugshot, custom bounty reward, and scannable profile QR code.
+                    </span>
                   </button>
 
-                  {/* Hidden Input for Native Camera Fallback */}
-                  <input
-                    ref={cameraFallbackInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="user"
-                    onChange={handleImageUpload}
-                    className="hidden"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => { setFormat('pfp'); scrollToPreview(); }}
+                    className={`flex flex-col items-start p-4 rounded-xl border-3 text-left transition-all ${
+                      format === 'pfp' ? 'border-[#0F2E1E] bg-[#DE612F] text-[#FDFBF7] shadow-[3px_3px_0_#0F2E1E]' : 'border-[#0F2E1E]/30 bg-[#FDFBF7] hover:bg-[#E5F085]/20 text-[#0F2E1E]/70'
+                    }`}
+                  >
+                    <span className="font-bold text-sm tracking-tight font-mono flex items-center gap-1.5">
+                      Format A: PFP Frame / Overlay
+                      {format === 'pfp' && <Check className="w-4 h-4 text-[#E5F085]" />}
+                    </span>
+                    <span className={`text-[11px] font-mono mt-1 leading-normal ${format === 'pfp' ? 'text-[#FDFBF7]/90' : 'text-[#0F2E1E]/50'}`}>
+                      Circular profile frame wrapping your photo in custom HH Goa vibes with palm trees and a status ribbon.
+                    </span>
+                  </button>
+                </div>
+              </section>
+
+              {/* 3. Form Input Details card */}
+              <section className="bg-[#FDFBF7] border-4 border-[#0F2E1E] p-6 rounded-2xl shadow-[6px_6px_0px_#0F2E1E] transition-all">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-md font-anton uppercase tracking-tight text-[#0F2E1E] flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-[#DE612F] text-[#FDFBF7] border-2 border-[#0F2E1E] flex items-center justify-center text-xs font-mono">3</span>
+                    WANTED POSTER DETAILS
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={handleRandomize}
+                    className="flex items-center gap-1.5 text-xs font-mono font-bold py-1 px-3 bg-[#E5F085] border-2 border-[#0F2E1E] rounded-lg text-[#0F2E1E] hover:bg-[#DE612F] hover:text-[#FDFBF7] transition-all shadow-[2px_2px_0px_#0F2E1E]"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    Randomize ID
+                  </button>
                 </div>
 
-                {/* 1-Click Demo Avatars */}
-                <div className="flex flex-col justify-center space-y-3 bg-[#E5F085]/30 p-4 rounded-xl border-2 border-[#0F2E1E]/10">
-                  <span className="text-[11px] font-mono text-[#0F2E1E] uppercase tracking-wider font-bold">
-                    💡 Try 1-Click Demo Avatar:
-                  </span>
-                  <div className="grid grid-cols-3 gap-2">
-                    {DEMO_AVATARS.map((avatar, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => loadDemoAvatar(idx)}
-                        className="flex flex-col items-center p-2 rounded-lg bg-[#FDFBF7] hover:bg-[#E5F085] border-2 border-[#0F2E1E]/30 hover:border-[#0F2E1E] transition-all"
-                      >
-                        <div className="w-10 h-10 rounded-full overflow-hidden mb-1.5 border-2 border-[#0F2E1E]/50">
-                          <img src={avatar.src} alt={avatar.name} className="w-full h-full object-cover" />
-                        </div>
-                        <span className="text-[9px] font-mono text-[#0F2E1E] font-bold truncate w-full text-center">
-                          {avatar.name.split(' ')[0]}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Slider Adjustment viewport */}
-              {imageSrc && (
-                <div className="mt-5 border-t-2 border-[#0F2E1E]/10 pt-5">
-                  <ImageAdjuster
-                    imageSrc={imageSrc}
-                    format={format}
-                    zoom={zoom}
-                    setZoom={setZoom}
-                    rotation={rotation}
-                    setRotation={setRotation}
-                    offset={offset}
-                    setOffset={setOffset}
-                  />
-                </div>
-              )}
-            </section>
-
-            {/* 2. Format Selector card */}
-            <section className="bg-[#FDFBF7] border-4 border-[#0F2E1E] p-6 rounded-2xl shadow-[6px_6px_0px_#0F2E1E] transition-all">
-              <h3 className="text-md font-anton uppercase tracking-tight text-[#0F2E1E] flex items-center gap-2 mb-4">
-                <span className="w-6 h-6 rounded-full bg-[#DE612F] text-[#FDFBF7] border-2 border-[#0F2E1E] flex items-center justify-center text-xs font-mono">2</span>
-                CHOOSE TEMPLATE FORMAT
-              </h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <button
-                  type="button"
-                  onClick={() => setFormat('badge')}
-                  className={`flex flex-col items-start p-4 rounded-xl border-3 text-left transition-all ${
-                    format === 'badge'
-                      ? 'border-[#0F2E1E] bg-[#DE612F] text-[#FDFBF7] shadow-[3px_3px_0_#0F2E1E]'
-                      : 'border-[#0F2E1E]/30 bg-[#FDFBF7] hover:bg-[#E5F085]/20 text-[#0F2E1E]/70'
-                  }`}
-                >
-                  <span className="font-bold text-sm tracking-tight font-mono flex items-center gap-1.5">
-                    Format B: Wanted Poster
-                    {format === 'badge' && <Check className="w-4 h-4 text-[#E5F085]" />}
-                  </span>
-                  <span className={`text-[11px] font-mono mt-1 leading-normal ${format === 'badge' ? 'text-[#FDFBF7]/90' : 'text-[#0F2E1E]/50'}`}>
-                    Retro wanted poster featuring your photo as a sepia-toned mugshot, custom bounty reward, and scannable profile QR code.
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setFormat('pfp')}
-                  className={`flex flex-col items-start p-4 rounded-xl border-3 text-left transition-all ${
-                    format === 'pfp'
-                      ? 'border-[#0F2E1E] bg-[#DE612F] text-[#FDFBF7] shadow-[3px_3px_0_#0F2E1E]'
-                      : 'border-[#0F2E1E]/30 bg-[#FDFBF7] hover:bg-[#E5F085]/20 text-[#0F2E1E]/70'
-                  }`}
-                >
-                  <span className="font-bold text-sm tracking-tight font-mono flex items-center gap-1.5">
-                    Format A: PFP Frame / Overlay
-                    {format === 'pfp' && <Check className="w-4 h-4 text-[#E5F085]" />}
-                  </span>
-                  <span className={`text-[11px] font-mono mt-1 leading-normal ${format === 'pfp' ? 'text-[#FDFBF7]/90' : 'text-[#0F2E1E]/50'}`}>
-                    Circular profile frame wrapping your photo in custom HH Goa vibes with palm trees and a status ribbon.
-                  </span>
-                </button>
-              </div>
-            </section>
-
-            {/* 3. Form Input Details card */}
-            <section className="bg-[#FDFBF7] border-4 border-[#0F2E1E] p-6 rounded-2xl shadow-[6px_6px_0px_#0F2E1E] transition-all">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-md font-anton uppercase tracking-tight text-[#0F2E1E] flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-[#DE612F] text-[#FDFBF7] border-2 border-[#0F2E1E] flex items-center justify-center text-xs font-mono">3</span>
-                  WANTED POSTER DETAILS
-                </h3>
-                <button
-                  type="button"
-                  onClick={handleRandomize}
-                  className="flex items-center gap-1.5 text-xs font-mono font-bold py-1 px-3 bg-[#E5F085] border-2 border-[#0F2E1E] rounded-lg text-[#0F2E1E] hover:bg-[#DE612F] hover:text-[#FDFBF7] transition-all shadow-[2px_2px_0px_#0F2E1E]"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                  Randomize ID
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                {/* Full Name */}
-                <div className="flex flex-col space-y-1">
-                  <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold">Full Name</label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    maxLength={24}
-                    placeholder="Enter your name"
-                    className="bg-[#FDFBF7] border-3 border-[#0F2E1E] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#DE612F] transition-all text-[#0F2E1E] font-mono font-bold shadow-[2px_2px_0px_#0F2E1E]"
-                  />
-                </div>
-
-                {/* Scannable QR Link */}
-                <div className="flex flex-col space-y-1">
-                  <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold flex items-center gap-1">
-                    <LinkIcon className="w-3.5 h-3.5 text-[#DE612F]" /> Scannable QR Code Link
-                  </label>
-                  <input
-                    type="text"
-                    value={qrLink}
-                    onChange={(e) => setQrLink(e.target.value)}
-                    placeholder="e.g. https://github.com/yourusername"
-                    className="bg-[#FDFBF7] border-3 border-[#0F2E1E] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#DE612F] transition-all text-[#0F2E1E] font-mono font-bold shadow-[2px_2px_0px_#0F2E1E]"
-                  />
-                  <p className="text-[10px] text-[#0F2E1E]/60 font-mono font-medium">
-                     attendees scan this code directly to view your link!
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Primary Role */}
+                <div className="space-y-4">
                   <div className="flex flex-col space-y-1">
-                    <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold">Primary Role / Title</label>
+                    <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold">Full Name</label>
                     <input
                       type="text"
-                      value={role}
-                      onChange={(e) => setRole(e.target.value)}
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
                       maxLength={24}
-                      placeholder="e.g. Software Developer"
+                      placeholder="Enter your name"
                       className="bg-[#FDFBF7] border-3 border-[#0F2E1E] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#DE612F] transition-all text-[#0F2E1E] font-mono font-bold shadow-[2px_2px_0px_#0F2E1E]"
                     />
                   </div>
 
-                  {/* Builder Class */}
                   <div className="flex flex-col space-y-1">
-                    <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold">Builder Class / Persona</label>
-                    <select
-                      value={builderClass}
-                      onChange={(e) => setBuilderClass(e.target.value)}
-                      className="bg-[#FDFBF7] border-3 border-[#0F2E1E] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#DE612F] transition-all text-[#0F2E1E] font-mono font-bold shadow-[2px_2px_0px_#0F2E1E]"
-                    >
-                      {BUILDER_CLASSES.map((cls, idx) => (
-                        <option key={idx} value={cls}>{cls}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Tech Stack */}
-                  <div className="flex flex-col space-y-1">
-                    <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold">Tech Stack / Skills</label>
+                    <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold flex items-center gap-1">
+                      <LinkIcon className="w-3.5 h-3.5 text-[#DE612F]" /> Scannable QR Code Link
+                    </label>
                     <input
                       type="text"
-                      value={skills}
-                      onChange={(e) => setSkills(e.target.value)}
-                      maxLength={32}
-                      placeholder="e.g. React, Node, Rust"
+                      value={qrLink}
+                      onChange={(e) => setQrLink(e.target.value)}
+                      placeholder="e.g. https://github.com/yourusername"
                       className="bg-[#FDFBF7] border-3 border-[#0F2E1E] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#DE612F] transition-all text-[#0F2E1E] font-mono font-bold shadow-[2px_2px_0px_#0F2E1E]"
                     />
                   </div>
 
-                  {/* Builder ID */}
-                  <div className="flex flex-col space-y-1">
-                    <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold">Builder ID Number</label>
-                    <input
-                      type="text"
-                      value={badgeId}
-                      onChange={(e) => setBadgeId(e.target.value)}
-                      maxLength={12}
-                      placeholder="#HH26-1234"
-                      className="bg-[#FDFBF7] border-3 border-[#0F2E1E] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#DE612F] transition-all text-[#0F2E1E] font-mono font-bold shadow-[2px_2px_0px_#0F2E1E]"
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex flex-col space-y-1">
+                      <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold">Primary Role / Title</label>
+                      <input
+                        type="text"
+                        value={role}
+                        onChange={(e) => setRole(e.target.value)}
+                        maxLength={24}
+                        placeholder="e.g. Software Developer"
+                        className="bg-[#FDFBF7] border-3 border-[#0F2E1E] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#DE612F] transition-all text-[#0F2E1E] font-mono font-bold shadow-[2px_2px_0px_#0F2E1E]"
+                      />
+                    </div>
+                    <div className="flex flex-col space-y-1">
+                      <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold">Builder Class / Persona</label>
+                      <select
+                        value={builderClass}
+                        onChange={(e) => setBuilderClass(e.target.value)}
+                        className="bg-[#FDFBF7] border-3 border-[#0F2E1E] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#DE612F] transition-all text-[#0F2E1E] font-mono font-bold shadow-[2px_2px_0px_#0F2E1E]"
+                      >
+                        {BUILDER_CLASSES.map((cls, idx) => (
+                          <option key={idx} value={cls}>{cls}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex flex-col space-y-1">
+                      <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold">Tech Stack / Skills</label>
+                      <input
+                        type="text"
+                        value={skills}
+                        onChange={(e) => setSkills(e.target.value)}
+                        maxLength={32}
+                        placeholder="e.g. React, Node, Rust"
+                        className="bg-[#FDFBF7] border-3 border-[#0F2E1E] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#DE612F] transition-all text-[#0F2E1E] font-mono font-bold shadow-[2px_2px_0px_#0F2E1E]"
+                      />
+                    </div>
+                    <div className="flex flex-col space-y-1">
+                      <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold">Builder ID Number</label>
+                      <input
+                        type="text"
+                        value={badgeId}
+                        onChange={(e) => setBadgeId(e.target.value)}
+                        maxLength={12}
+                        placeholder="#HH26-1234"
+                        className="bg-[#FDFBF7] border-3 border-[#0F2E1E] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#DE612F] transition-all text-[#0F2E1E] font-mono font-bold shadow-[2px_2px_0px_#0F2E1E]"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
-            </section>
-          </div>
+              </section>
+            </div>
 
-          {/* RIGHT COLUMN: PREVIEW */}
-          <div className="lg:col-span-5 flex flex-col space-y-6 lg:sticky lg:top-28">
-            <div className="bg-[#FDFBF7] border-4 border-[#0F2E1E] p-6 rounded-2xl shadow-[6px_6px_0px_#0F2E1E] flex flex-col items-center">
-              <h3 className="text-lg font-anton uppercase tracking-tight text-[#0F2E1E] w-full text-center border-b-2 border-[#0F2E1E]/10 pb-3 mb-5">
-                REAL-TIME PREVIEW
-              </h3>
+            {/* RIGHT COLUMN: PREVIEW */}
+            <div className="lg:col-span-5 flex flex-col space-y-6 lg:sticky lg:top-28" ref={previewRef}>
+              <div className="bg-[#FDFBF7] border-4 border-[#0F2E1E] p-6 rounded-2xl shadow-[6px_6px_0px_#0F2E1E] flex flex-col items-center">
+                <h3 className="text-lg font-anton uppercase tracking-tight text-[#0F2E1E] w-full text-center border-b-2 border-[#0F2E1E]/10 pb-3 mb-5">
+                  REAL-TIME PREVIEW
+                </h3>
 
-              {/* Canvas viewport */}
-              <div className="w-full flex justify-center bg-[#E5F085]/20 p-4 rounded-xl border-3 border-[#0F2E1E] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05)]">
-                <canvas 
-                  ref={canvasRef} 
-                  className="max-w-full rounded border-2 border-[#0F2E1E] shadow-md object-contain bg-[#0F2E1E]" 
-                  style={{
-                    maxHeight: format === 'badge' ? '500px' : '400px',
-                    aspectRatio: format === 'badge' ? '2/3' : '1/1'
-                  }}
-                />
-              </div>
+                <div className="w-full flex justify-center bg-[#E5F085]/20 p-4 rounded-xl border-3 border-[#0F2E1E] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05)]">
+                  <canvas 
+                    ref={canvasRef} 
+                    className="max-w-full rounded border-2 border-[#0F2E1E] shadow-md object-contain bg-[#0F2E1E]" 
+                    style={{
+                      maxHeight: format === 'badge' ? '500px' : '400px',
+                      aspectRatio: format === 'badge' ? '2/3' : '1/1'
+                    }}
+                  />
+                </div>
 
-              {/* ACTION EXPORT BUTTONS */}
-              <div className="w-full mt-6 grid grid-cols-1 gap-4">
-                {/* Download Button */}
-                <button
-                  type="button"
-                  onClick={handleDownload}
-                  className="flex items-center justify-center gap-2 py-3 px-6 bg-[#DE612F] hover:bg-[#DE612F]/90 text-[#FDFBF7] font-anton uppercase tracking-tight text-lg rounded-xl border-3 border-[#0F2E1E] shadow-[4px_4px_0px_#0F2E1E] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0px_#0F2E1E] transition-all"
-                >
-                  <Download className="w-5 h-5 stroke-[3px]" />
-                  Download Graphic
-                </button>
+                <div className="w-full mt-6 grid grid-cols-1 gap-4">
+                  {/* Share to X (Primary CTA) */}
+                  <button
+                    type="button"
+                    onClick={handleShareToX}
+                    className="flex items-center justify-center gap-2 py-3 px-6 bg-[#000000] hover:bg-gray-800 text-white font-anton uppercase tracking-tight text-lg rounded-xl border-3 border-[#0F2E1E] shadow-[4px_4px_0px_#0F2E1E] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0px_#0F2E1E] transition-all"
+                  >
+                    <Share2 className="w-5 h-5 stroke-[3px]" />
+                    Share to Unlock Download
+                  </button>
 
-                {/* Share to X Button */}
-                <button
-                  type="button"
-                  onClick={handleShareToX}
-                  className="flex items-center justify-center gap-2 py-3 px-6 bg-[#E5F085] hover:bg-[#E5F085]/90 text-[#0F2E1E] font-anton uppercase tracking-tight text-lg rounded-xl border-3 border-[#0F2E1E] shadow-[4px_4px_0px_#0F2E1E] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0px_#0F2E1E] transition-all"
-                >
-                  <Share2 className="w-5 h-5 stroke-[3px]" />
-                  Share to X (Twitter)
-                </button>
+                  {/* Standard Download Button */}
+                  <button
+                    type="button"
+                    onClick={() => executeDownload()}
+                    disabled={!hasSharedToX}
+                    className={`flex items-center justify-center gap-2 py-3 px-6 font-anton uppercase tracking-tight text-lg rounded-xl border-3 border-[#0F2E1E] transition-all ${
+                      hasSharedToX 
+                      ? 'bg-[#DE612F] hover:bg-[#DE612F]/90 text-[#FDFBF7] shadow-[4px_4px_0px_#0F2E1E] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0px_#0F2E1E] cursor-pointer' 
+                      : 'bg-gray-300 text-gray-500 shadow-none cursor-not-allowed opacity-60'
+                    }`}
+                  >
+                    <Download className="w-5 h-5 stroke-[3px]" />
+                    {hasSharedToX ? 'Download Graphic' : 'Locked'}
+                  </button>
+                  {!hasSharedToX && (
+                     <p className="text-[10px] font-mono text-center text-[#0F2E1E]/60 -mt-2">
+                       Share to Twitter to automatically download your image!
+                     </p>
+                  )}
+                </div>
               </div>
             </div>
+
           </div>
+        </main>
 
-        </div>
-      </main>
+        {/* FOOTER */}
+        <footer className="max-w-6xl mx-auto px-4 mt-16 border-t-2 border-[#0F2E1E]/10 pt-6 flex flex-col md:flex-row items-center justify-between gap-4 text-xs font-mono text-[#0F2E1E]/60 font-medium pb-8">
+          <span>© 2026 Hacker House Goa. Built with 💚 for the developer community.</span>
+          <div className="flex gap-4">
+            <a href="https://hhgoa.com" target="_blank" rel="noreferrer" className="hover:text-[#DE612F] transition-colors font-bold">hhgoa.com</a>
+            <span>•</span>
+            <span className="text-[#DE612F] font-bold">#FrameInGoa</span>
+          </div>
+        </footer>
 
-      {/* FOOTER */}
-      <footer className="max-w-6xl mx-auto px-4 mt-16 border-t-2 border-[#0F2E1E]/10 pt-6 flex flex-col md:flex-row items-center justify-between gap-4 text-xs font-mono text-[#0F2E1E]/60 font-medium">
-        <span>© 2026 Hacker House Goa. Built with 💚 for the developer community.</span>
-        <div className="flex gap-4">
-          <a href="https://hhgoa.com" target="_blank" rel="noreferrer" className="hover:text-[#DE612F] transition-colors font-bold">hhgoa.com</a>
-          <span>•</span>
-          <span className="text-[#DE612F] font-bold">#FrameInGoa</span>
-        </div>
-      </footer>
+        {isCameraOpen && (
+          <CameraCaptureModal
+            onClose={() => setIsCameraOpen(false)}
+            onCapture={(dataUrl) => {
+              const img = new Image();
+              img.onload = () => {
+                setImageElement(img);
+                setImageSrc(dataUrl);
+                scrollToPreview();
+              };
+              img.src = dataUrl;
+            }}
+            onFallbackTrigger={triggerNativeCamera}
+          />
+        )}
 
-      {/* Camera Capture Modal */}
-      {isCameraOpen && (
-        <CameraCaptureModal
-          onClose={() => setIsCameraOpen(false)}
-          onCapture={(dataUrl) => {
-            const img = new Image();
-            img.onload = () => {
-              setImageElement(img);
-              setImageSrc(dataUrl);
-              setZoom(1);
-              setRotation(0);
-              setOffset({ x: 0, y: 0 });
-            };
-            img.src = dataUrl;
-          }}
-          onFallbackTrigger={triggerNativeCamera}
-        />
-      )}
+        {downloadImageUrl && (
+          <DownloadSuccessModal
+            imageUrl={downloadImageUrl}
+            filename={downloadFilename}
+            onClose={() => setDownloadImageUrl(null)}
+          />
+        )}
 
-      {/* Download Success Modal */}
-      {downloadImageUrl && (
-        <DownloadSuccessModal
-          imageUrl={downloadImageUrl}
-          filename={downloadFilename}
-          onClose={() => {
-            setDownloadImageUrl(null);
-          }}
-        />
-      )}
-
-    </div>
+      </div>
+    </>
   );
 }

@@ -9,22 +9,23 @@ export interface CardDetails {
   qrLink: string;
 }
 
-interface ImageTransform {
-  zoom: number;
-  rotation: number;
-  offset: { x: number; y: number };
+export interface ThemeSettings {
+  bg: string;
+  primary: string;
+  accent: string;
+  font: string;
 }
 
 const d2r = (deg: number) => (deg * Math.PI) / 180;
 
 // Draw custom Devanagari script for 'गोवा' (Goa)
-const drawGoaScript = (ctx: CanvasRenderingContext2D, x: number, y: number, scale: number = 1) => {
+const drawGoaScript = (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, scale: number = 1) => {
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(scale, scale);
 
-  ctx.strokeStyle = '#DE612F'; // Warm orange
-  ctx.fillStyle = '#DE612F';
+  ctx.strokeStyle = color; 
+  ctx.fillStyle = color;
   ctx.lineWidth = 4.5;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
@@ -64,21 +65,21 @@ const drawGoaScript = (ctx: CanvasRenderingContext2D, x: number, y: number, scal
 };
 
 // Draw Simulated QR Code
-const drawSimulatedQRCode = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => {
+const drawSimulatedQRCode = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number, darkColor: string, lightColor: string, accentColor: string) => {
   ctx.save();
-  ctx.fillStyle = '#1C1510'; // Dark brown ink
+  ctx.fillStyle = darkColor; 
   ctx.fillRect(x, y, size, size);
 
-  ctx.strokeStyle = '#F6EAD8';
+  ctx.strokeStyle = lightColor;
   ctx.lineWidth = 4;
   ctx.strokeRect(x + 4, y + 4, size - 8, size - 8);
 
   const drawAnchor = (ax: number, ay: number) => {
-    ctx.fillStyle = '#F6EAD8';
+    ctx.fillStyle = lightColor;
     ctx.fillRect(ax, ay, 20, 20);
-    ctx.fillStyle = '#1C1510';
+    ctx.fillStyle = darkColor;
     ctx.fillRect(ax + 4, ay + 4, 12, 12);
-    ctx.fillStyle = '#F6EAD8';
+    ctx.fillStyle = lightColor;
     ctx.fillRect(ax + 7, ay + 7, 6, 6);
   };
 
@@ -86,7 +87,7 @@ const drawSimulatedQRCode = (ctx: CanvasRenderingContext2D, x: number, y: number
   drawAnchor(x + size - 30, y + 10);
   drawAnchor(x + 10, y + size - 30);
 
-  ctx.fillStyle = '#F6EAD8';
+  ctx.fillStyle = lightColor;
   const dotSize = 4;
   for (let px = 10; px < size - 10; px += dotSize) {
     for (let py = 10; py < size - 10; py += dotSize) {
@@ -103,9 +104,8 @@ const drawSimulatedQRCode = (ctx: CanvasRenderingContext2D, x: number, y: number
     }
   }
 
-  // Draw simple lock/house icon inside QR code center
   const center = x + size / 2;
-  ctx.fillStyle = '#DE612F';
+  ctx.fillStyle = accentColor;
   ctx.fillRect(center - 8, center - 4, 16, 12);
   ctx.beginPath();
   ctx.moveTo(center - 12, center - 4);
@@ -117,14 +117,27 @@ const drawSimulatedQRCode = (ctx: CanvasRenderingContext2D, x: number, y: number
   ctx.restore();
 };
 
-/**
- * Render Format A: PFP Frame / Overlay (Brutalist style)
- */
+// Object-fit: cover drawing function
+const drawImageCover = (ctx: CanvasRenderingContext2D, img: HTMLImageElement, cx: number, cy: number, w: number, h: number) => {
+  const imgRatio = img.width / img.height;
+  const containerRatio = w / h;
+  let drawW = w;
+  let drawH = h;
+
+  if (imgRatio > containerRatio) {
+    drawW = h * imgRatio;
+  } else {
+    drawH = w / imgRatio;
+  }
+
+  ctx.drawImage(img, cx - drawW / 2, cy - drawH / 2, drawW, drawH);
+};
+
 export const drawPFPFrame = (
   canvas: HTMLCanvasElement,
   imageElement: HTMLImageElement | null,
-  transform: ImageTransform,
-  details: CardDetails
+  details: CardDetails,
+  theme: ThemeSettings
 ) => {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -133,11 +146,9 @@ export const drawPFPFrame = (
   canvas.width = size;
   canvas.height = size;
 
-  // 1. Clear background (Dark forest green)
-  ctx.fillStyle = '#0F2E1E';
+  ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, size, size);
 
-  // 2. Draw user photo cropped as circle inside center
   const cx = size / 2;
   const cy = size / 2;
   const radius = size * 0.38;
@@ -146,41 +157,31 @@ export const drawPFPFrame = (
   ctx.beginPath();
   ctx.arc(cx, cy, radius, 0, Math.PI * 2);
   ctx.clip();
-
-  ctx.fillStyle = '#0F2E1E';
+  ctx.fillStyle = theme.bg;
   ctx.fill();
 
   if (imageElement) {
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.translate(transform.offset.x * 2.5, transform.offset.y * 2.5);
-    ctx.rotate(d2r(transform.rotation));
-    const drawScale = transform.zoom * (radius * 2 / Math.min(imageElement.width, imageElement.height));
-    const drawW = imageElement.width * drawScale;
-    const drawH = imageElement.height * drawScale;
-    ctx.drawImage(imageElement, -drawW / 2, -drawH / 2, drawW, drawH);
-    ctx.restore();
+    drawImageCover(ctx, imageElement, cx, cy, radius * 2, radius * 2);
   } else {
     ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#E5F085';
-    ctx.font = 'bold 36px monospace';
+    ctx.fillStyle = theme.primary;
+    ctx.font = `bold 36px ${theme.font}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('NO PHOTO UPLOADED', cx, cy);
   }
   ctx.restore();
 
-  // 3. Draw Brand Borders
-  ctx.strokeStyle = '#E5F085'; // Pale yellow-green
+  ctx.strokeStyle = theme.primary; 
   ctx.lineWidth = 14;
   ctx.beginPath();
   ctx.arc(cx, cy, radius + 7, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.strokeStyle = '#DE612F'; // Orange
+  ctx.strokeStyle = theme.accent; 
   ctx.lineWidth = 6;
   ctx.setLineDash([12, 16]);
   ctx.beginPath();
@@ -188,38 +189,35 @@ export const drawPFPFrame = (
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // 4. Header Text Overlay using massive Anton font
   ctx.save();
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#E5F085';
+  ctx.fillStyle = theme.primary;
   
   if ('letterSpacing' in ctx) {
     (ctx as any).letterSpacing = '-2px';
   }
-  ctx.font = 'bold 74px "Anton", sans-serif';
+  ctx.font = `bold 74px ${theme.font}`;
   ctx.fillText('HACKER HOUSE GOA 2026', cx, 90);
   
   if ('letterSpacing' in ctx) {
     (ctx as any).letterSpacing = '0px';
   }
-  ctx.fillStyle = '#E5F085';
-  ctx.font = '32px monospace';
+  ctx.fillStyle = theme.primary;
+  ctx.font = `32px ${theme.font}`;
   ctx.fillText('• BUILD IN GOA • SHIP FROM PARADISE •', cx, 145);
   ctx.restore();
 
-  // 5. Draw Goa Script
-  drawGoaScript(ctx, cx + 240, cy - 250, 1.4);
+  drawGoaScript(ctx, cx + 240, cy - 250, theme.accent, 1.4);
 
-  // 6. Draw Palm Trees
   ctx.save();
   ctx.translate(140, 750);
-  ctx.strokeStyle = '#E5F085';
+  ctx.strokeStyle = theme.primary;
   ctx.lineWidth = 8;
   ctx.beginPath();
   ctx.moveTo(0, 200);
   ctx.quadraticCurveTo(-40, 50, -10, -50);
   ctx.stroke();
-  ctx.fillStyle = '#E5F085';
+  ctx.fillStyle = theme.primary;
   for (let i = 0; i < 5; i++) {
     ctx.beginPath();
     ctx.ellipse(-10 - i * 10, -50 - i * 5, 45, 12, d2r(-30 + i * 20), 0, Math.PI * 2);
@@ -230,13 +228,13 @@ export const drawPFPFrame = (
   ctx.save();
   ctx.translate(860, 750);
   ctx.scale(-1, 1);
-  ctx.strokeStyle = '#E5F085';
+  ctx.strokeStyle = theme.primary;
   ctx.lineWidth = 8;
   ctx.beginPath();
   ctx.moveTo(0, 200);
   ctx.quadraticCurveTo(-40, 50, -10, -50);
   ctx.stroke();
-  ctx.fillStyle = '#E5F085';
+  ctx.fillStyle = theme.primary;
   for (let i = 0; i < 5; i++) {
     ctx.beginPath();
     ctx.ellipse(-10 - i * 10, -50 - i * 5, 45, 12, d2r(-30 + i * 20), 0, Math.PI * 2);
@@ -244,10 +242,9 @@ export const drawPFPFrame = (
   }
   ctx.restore();
 
-  // 7. Footer Badge Ribbon
   ctx.save();
   const badgeText = `${details.builderClass.toUpperCase()} | ${details.role.toUpperCase()}`;
-  ctx.font = 'bold 32px monospace';
+  ctx.font = `bold 32px ${theme.font}`;
   const textWidth = ctx.measureText(badgeText).width;
   
   const ribbonW = textWidth + 80;
@@ -258,27 +255,24 @@ export const drawPFPFrame = (
   ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
   ctx.fillRect(rx + 8, ry + 8, ribbonW, ribbonH);
 
-  ctx.fillStyle = '#DE612F'; // Orange background
+  ctx.fillStyle = theme.accent; 
   ctx.fillRect(rx, ry, ribbonW, ribbonH);
-  ctx.strokeStyle = '#E5F085';
+  ctx.strokeStyle = theme.primary;
   ctx.lineWidth = 4;
   ctx.strokeRect(rx, ry, ribbonW, ribbonH);
 
-  ctx.fillStyle = '#E5F085';
+  ctx.fillStyle = theme.primary;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   
   if ('letterSpacing' in ctx) {
     (ctx as any).letterSpacing = '-1px';
   }
-  ctx.font = 'bold 36px "Anton", sans-serif';
+  ctx.font = `bold 36px ${theme.font}`;
   ctx.fillText(badgeText, cx, ry + ribbonH / 2);
   ctx.restore();
 };
 
-/**
- * Helper to draw a distressed slanted rubber stamp
- */
 const drawRubberStamp = (
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -286,7 +280,8 @@ const drawRubberStamp = (
   y: number,
   angle: number,
   color: string,
-  paperColor: string = '#F6EAD8'
+  paperColor: string,
+  fontFamily: string
 ) => {
   ctx.save();
   ctx.translate(x, y);
@@ -296,7 +291,7 @@ const drawRubberStamp = (
   ctx.fillStyle = color;
   ctx.lineWidth = 4.5;
 
-  ctx.font = 'bold 22px "Space Grotesk", sans-serif';
+  ctx.font = `bold 22px ${fontFamily}`;
   const textW = ctx.measureText(text).width;
   const padX = 16;
   const padY = 6;
@@ -306,20 +301,15 @@ const drawRubberStamp = (
   const rw = textW + padX * 2;
   const rh = 24 + padY * 2;
 
-  // Outer distressed box border
   ctx.strokeRect(rx, ry, rw, rh);
-
-  // Inner distressed box border
   ctx.lineWidth = 1.5;
   ctx.strokeRect(rx + 4, ry + 4, rw - 8, rh - 8);
 
-  // Stamp text
-  ctx.font = '900 24px "Anton", sans-serif';
+  ctx.font = `900 24px ${fontFamily}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, 0, 2);
 
-  // Paint distress noise spots over the stamp using the paper color
   ctx.fillStyle = paperColor;
   for (let i = 0; i < 22; i++) {
     ctx.beginPath();
@@ -336,15 +326,12 @@ const drawRubberStamp = (
   ctx.restore();
 };
 
-/**
- * Render Format B: Wanted Poster (Vintage Streetwear / GenZ Style)
- */
 export const drawIDBadge = (
   canvas: HTMLCanvasElement,
   imageElement: HTMLImageElement | null,
-  transform: ImageTransform,
   details: CardDetails,
-  qrCodeImage: HTMLImageElement | null
+  qrCodeImage: HTMLImageElement | null,
+  theme: ThemeSettings
 ) => {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -354,16 +341,14 @@ export const drawIDBadge = (
   canvas.width = w;
   canvas.height = h;
 
-  const paperColor = '#F6EAD8';
+  const paperColor = theme.primary; 
 
-  // 1. Create a beautiful radial gradient for vintage paper texture
   const paperGrad = ctx.createRadialGradient(w / 2, h / 2, 100, w / 2, h / 2, Math.max(w, h));
-  paperGrad.addColorStop(0, paperColor); // Lighter center
-  paperGrad.addColorStop(1, '#D5BEA1'); // Darker edges
+  paperGrad.addColorStop(0, paperColor); 
+  paperGrad.addColorStop(1, theme.primary === '#F6EAD8' ? '#D5BEA1' : theme.bg); 
   ctx.fillStyle = paperGrad;
   ctx.fillRect(0, 0, w, h);
 
-  // Draw some soft vintage dust specs and grunge marks
   ctx.fillStyle = 'rgba(139, 90, 43, 0.08)';
   for (let i = 0; i < 12; i++) {
     ctx.beginPath();
@@ -371,21 +356,18 @@ export const drawIDBadge = (
     ctx.fill();
   }
 
-  // 2. Draw outer double black borders
-  const borderCharcoal = '#1C1510'; // Aged dark ink
-  ctx.strokeStyle = borderCharcoal;
+  const borderDark = theme.bg;
+  ctx.strokeStyle = borderDark;
   ctx.lineWidth = 8;
   ctx.strokeRect(30, 30, w - 60, h - 60);
 
   ctx.lineWidth = 3;
   ctx.strokeRect(42, 42, w - 84, h - 84);
 
-  // 3. DRAW VERTICAL BORDER TEXT (Streetwear style)
   ctx.save();
   ctx.fillStyle = 'rgba(28, 21, 16, 0.35)';
-  ctx.font = 'bold 12px monospace';
+  ctx.font = `bold 12px ${theme.font}`;
   
-  // Left border vertical text
   ctx.save();
   ctx.translate(22, h / 2);
   ctx.rotate(-Math.PI / 2);
@@ -393,7 +375,6 @@ export const drawIDBadge = (
   ctx.fillText('LESS NOISE • MORE SIGNAL • LOCK IN & SHIP • 247 BUILDERS', 0, 0);
   ctx.restore();
 
-  // Right border vertical text
   ctx.save();
   ctx.translate(w - 22, h / 2);
   ctx.rotate(Math.PI / 2);
@@ -402,59 +383,52 @@ export const drawIDBadge = (
   ctx.restore();
   ctx.restore();
 
-  // 4. TITLE: "WANTED"
   ctx.save();
-  ctx.fillStyle = borderCharcoal;
+  ctx.fillStyle = borderDark;
   ctx.textAlign = 'center';
   
   if ('letterSpacing' in ctx) {
     (ctx as any).letterSpacing = '8px';
   }
   
-  ctx.font = '900 120px "Anton", sans-serif';
+  ctx.font = `900 120px ${theme.font}`;
   ctx.fillText('WANTED', w / 2, 160);
   ctx.restore();
 
-  // Draw a horizontal divider line under WANTED
-  ctx.strokeStyle = borderCharcoal;
+  ctx.strokeStyle = borderDark;
   ctx.lineWidth = 5;
   ctx.beginPath();
   ctx.moveTo(60, 185);
   ctx.lineTo(w - 60, 185);
   ctx.stroke();
 
-  // Subheader: HACKER HOUSE GOA 2026 & BUILDER ID
   ctx.save();
-  ctx.fillStyle = borderCharcoal;
-  ctx.font = 'bold 22px "Space Grotesk", sans-serif';
+  ctx.fillStyle = borderDark;
+  ctx.font = `bold 22px ${theme.font}`;
   ctx.textAlign = 'center';
   ctx.fillText(`HACKER HOUSE GOA 2026  |  ID: ${details.badgeId.toUpperCase()}`, w / 2, 218);
   ctx.restore();
 
-  // 5. PHOTO CONTAINER (Mugshot style with height lines)
   const boxW = 480;
   const boxH = 500;
   const boxX = w / 2 - boxW / 2;
   const boxY = 245;
 
-  // Draw photo container border
-  ctx.strokeStyle = borderCharcoal;
+  ctx.strokeStyle = borderDark;
   ctx.lineWidth = 5;
   ctx.strokeRect(boxX, boxY, boxW, boxH);
 
-  // Draw height markings background inside the photo box
   ctx.save();
   ctx.beginPath();
   ctx.rect(boxX + 2.5, boxY + 2.5, boxW - 5, boxH - 5);
   ctx.clip();
 
-  ctx.fillStyle = '#E4D6C3'; // Slightly darker wood/paper tone
+  ctx.fillStyle = theme.primary === '#F6EAD8' ? '#E4D6C3' : theme.primary; 
   ctx.fillRect(boxX, boxY, boxW, boxH);
 
-  // Draw horizontal lines for the mugshot height grid
   ctx.strokeStyle = 'rgba(28, 21, 16, 0.22)';
   ctx.lineWidth = 2.5;
-  ctx.font = 'bold 13px monospace';
+  ctx.font = `bold 13px ${theme.font}`;
   ctx.fillStyle = 'rgba(28, 21, 16, 0.55)';
   ctx.textAlign = 'left';
 
@@ -469,79 +443,60 @@ export const drawIDBadge = (
     ctx.fillText(`${heightFeet}'${heightInches}"`, boxX + 12, lineY - 6);
   }
 
-  // Draw user's avatar image inside the photo box
   if (imageElement) {
     ctx.save();
-    const cx = boxX + boxW / 2;
-    const cy = boxY + boxH / 2;
-    ctx.translate(cx, cy);
-    ctx.translate(transform.offset.x * 2.0, transform.offset.y * 2.0);
-    ctx.rotate(d2r(transform.rotation));
-
-    // Vintage grayscale/sepia filter on user's photo
     ctx.filter = 'grayscale(100%) sepia(25%) contrast(115%)';
-    ctx.globalAlpha = 0.90; // Blend slightly with the background grid lines
-
-    const drawScale = transform.zoom * (boxW / Math.min(imageElement.width, imageElement.height));
-    const drawW = imageElement.width * drawScale;
-    const drawH = imageElement.height * drawScale;
-    ctx.drawImage(imageElement, -drawW / 2, -drawH / 2, drawW, drawH);
+    ctx.globalAlpha = 0.90; 
+    drawImageCover(ctx, imageElement, boxX + boxW / 2, boxY + boxH / 2, boxW, boxH);
     ctx.restore();
   } else {
     ctx.fillStyle = 'rgba(28, 21, 16, 0.08)';
     ctx.fillRect(boxX, boxY, boxW, boxH);
     ctx.fillStyle = 'rgba(28, 21, 16, 0.3)';
-    ctx.font = 'bold 24px monospace';
+    ctx.font = `bold 24px ${theme.font}`;
     ctx.textAlign = 'center';
     ctx.fillText('NO MUGSHOT UPLOADED', w / 2, boxY + boxH / 2);
   }
   ctx.restore();
 
-  // 6. DRAW STAMPS / SEALS OVER PHOTO (Authentic poster aesthetics)
-  // "100% SIGNAL" Stamp (Angled Red)
-  drawRubberStamp(ctx, '100% SIGNAL', boxX + 80, boxY + 70, -18, 'rgba(195, 41, 41, 0.82)', paperColor);
-  // "2:47 PM STUDIO APPROVED" Stamp (Angled Green)
-  drawRubberStamp(ctx, 'APPROVED: 2:47 PM', boxX + boxW - 120, boxY + boxH - 45, 12, 'rgba(23, 114, 56, 0.85)', paperColor);
+  drawRubberStamp(ctx, '100% SIGNAL', boxX + 80, boxY + 70, -18, 'rgba(195, 41, 41, 0.82)', paperColor, theme.font);
+  drawRubberStamp(ctx, 'APPROVED: 2:47 PM', boxX + boxW - 120, boxY + boxH - 45, 12, 'rgba(23, 114, 56, 0.85)', paperColor, theme.font);
 
-  // 7. BOUNTY / REWARD LABEL
   const bountyY = 770;
   const bountyW = boxW;
   const bountyH = 65;
   const bountyX = w / 2 - bountyW / 2;
 
   ctx.save();
-  ctx.fillStyle = borderCharcoal;
+  ctx.fillStyle = borderDark;
   ctx.fillRect(bountyX, bountyY, bountyW, bountyH);
 
-  ctx.fillStyle = '#F6EAD8'; // Light paper text
+  ctx.fillStyle = theme.primary; 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   
   if ('letterSpacing' in ctx) {
     (ctx as any).letterSpacing = '2px';
   }
-  ctx.font = 'bold 32px "Anton", sans-serif';
+  ctx.font = `bold 32px ${theme.font}`;
   ctx.fillText('REWARD: 1,000,000 $SOL', w / 2, bountyY + bountyH / 2 + 2);
   ctx.restore();
 
-  // 8. BUILDER IDENTITY INFO
   ctx.save();
-  ctx.fillStyle = borderCharcoal;
+  ctx.fillStyle = borderDark;
   ctx.textAlign = 'center';
 
-  // Builder Name
   if ('letterSpacing' in ctx) {
     (ctx as any).letterSpacing = '-1.5px';
   }
-  ctx.font = 'bold 62px "Anton", sans-serif';
+  ctx.font = `bold 62px ${theme.font}`;
   ctx.fillText(details.name.toUpperCase(), w / 2, 890);
 
   if ('letterSpacing' in ctx) {
     (ctx as any).letterSpacing = '0px';
   }
 
-  // Draw 5 Wanted Stars (Charcoal ink)
-  ctx.fillStyle = borderCharcoal;
+  ctx.fillStyle = borderDark;
   const starSize = 24;
   const starY = 915;
   ctx.textAlign = 'center';
@@ -551,24 +506,21 @@ export const drawIDBadge = (
     ctx.fillText('★', starX, starY);
   }
 
-  // Wanted details list (monospaced newspaper style)
   ctx.textAlign = 'left';
   const infoX = 80;
   const infoY = 975;
 
-  ctx.font = 'bold 20px monospace';
+  ctx.font = `bold 20px ${theme.font}`;
   ctx.fillText(`WANTED FOR: SHITPOSTING & DEPLOYING IN PARADISE`, infoX, infoY);
   ctx.fillText(`ROLE:       ${details.role.toUpperCase()}`, infoX, infoY + 34);
   ctx.fillText(`CLASS:      ${details.builderClass.toUpperCase()}`, infoX, infoY + 68);
   ctx.fillText(`STACK:      ${details.skills.toUpperCase()}`, infoX, infoY + 102);
   ctx.restore();
 
-  // 9. GOA DEVANAGARI STAMP (Sticker look, orange/pink overlay)
   ctx.save();
-  drawGoaScript(ctx, w - 170, 940, 1.25);
+  drawGoaScript(ctx, w - 170, 940, theme.accent, 1.25);
   ctx.restore();
 
-  // 10. SCANNABLE QR CODE & PROCEDURAL BARCODE (Utility details)
   const qrSize = 120;
   const qrX = w - qrSize - 80;
   const qrY = h - qrSize - 80;
@@ -578,34 +530,30 @@ export const drawIDBadge = (
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(qrX, qrY, qrSize, qrSize);
     ctx.drawImage(qrCodeImage, qrX + 6, qrY + 6, qrSize - 12, qrSize - 12);
-    ctx.strokeStyle = borderCharcoal;
+    ctx.strokeStyle = borderDark;
     ctx.lineWidth = 3.5;
     ctx.strokeRect(qrX, qrY, qrSize, qrSize);
   } else {
-    drawSimulatedQRCode(ctx, qrX, qrY, qrSize);
+    drawSimulatedQRCode(ctx, qrX, qrY, qrSize, borderDark, theme.primary, theme.accent);
   }
   
-  // Scannable caption
-  ctx.fillStyle = borderCharcoal;
-  ctx.font = 'bold 12px monospace';
+  ctx.fillStyle = borderDark;
+  ctx.font = `bold 12px ${theme.font}`;
   ctx.textAlign = 'center';
   ctx.fillText('Scan for Profile', qrX + qrSize / 2, qrY + qrSize + 18);
   ctx.restore();
 
-  // Barcode (Bottom left, matching references)
   ctx.save();
-  ctx.fillStyle = borderCharcoal;
+  ctx.fillStyle = borderDark;
   const barcodeX = 80;
   const barcodeY = h - 130;
   const barcodeW = 200;
   const barcodeH = 45;
 
-  // Draw start guard
   ctx.fillRect(barcodeX, barcodeY, 4, barcodeH);
   ctx.fillRect(barcodeX + 6, barcodeY, 2, barcodeH);
 
   let curBX = barcodeX + 10;
-  // Deterministic random generation using badges string seed
   const seedString = `${details.name}${details.badgeId}`;
   for (let bi = 0; bi < seedString.length && curBX < barcodeX + barcodeW - 12; bi++) {
     const val = seedString.charCodeAt(bi);
@@ -614,20 +562,17 @@ export const drawIDBadge = (
     ctx.fillRect(curBX, barcodeY, w1 * 2, barcodeH);
     curBX += (w1 + s1) * 2;
   }
-  // Draw end guard
   ctx.fillRect(barcodeX + barcodeW - 8, barcodeY, 2, barcodeH);
   ctx.fillRect(barcodeX + barcodeW - 4, barcodeY, 4, barcodeH);
 
-  // Barcode subtext
-  ctx.font = '10px monospace';
+  ctx.font = `10px ${theme.font}`;
   ctx.textAlign = 'left';
   ctx.fillText(`HH-2026-${details.badgeId.replace('#', '')}`, barcodeX + 2, barcodeY + barcodeH + 14);
   ctx.restore();
 
-  // 11. FOOTER SYSTEM STATS (Goa Residency Details)
   ctx.save();
   ctx.fillStyle = 'rgba(28, 21, 16, 0.65)';
-  ctx.font = 'bold 11px monospace';
+  ctx.font = `bold 11px ${theme.font}`;
   ctx.textAlign = 'center';
   ctx.fillText(
     'NO FLUFF, NO USELESS NETWORKING • 500 ELITE BUILDERS • HIGH-SPEED FIBER & THE OCEAN AT YOUR DOORSTEP',
@@ -636,7 +581,6 @@ export const drawIDBadge = (
   );
   ctx.restore();
 
-  // 12. WEATHERED GRAIN OVERLAY
   ctx.save();
   ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
   for (let i = 0; i < 2000; i++) {
@@ -648,4 +592,3 @@ export const drawIDBadge = (
   }
   ctx.restore();
 };
-

@@ -1,0 +1,11 @@
+1. crop directly without asking the user
+
+2. add customizing session for frames , colors , fonts.
+
+3. twitter access-check.
+
+4.in phone once they click generate it must scroll down to the preview.
+
+6.camera access in phone.
+
+7. try to make the 3D background
