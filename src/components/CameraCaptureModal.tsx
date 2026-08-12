@@ -31,6 +31,13 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     };
   }, [facingMode]);
 
+  // Bind stream to video element once it mounts
+  useEffect(() => {
+    if (permissionState === 'granted' && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+    }
+  }, [permissionState]);
+
   const checkCameraDevices = async () => {
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
