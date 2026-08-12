@@ -445,9 +445,84 @@ export const drawIDBadge = (
 
   if (imageElement) {
     ctx.save();
-    ctx.filter = 'grayscale(100%) sepia(25%) contrast(115%)';
-    ctx.globalAlpha = 0.90; 
-    drawImageCover(ctx, imageElement, boxX + boxW / 2, boxY + boxH / 2, boxW, boxH);
+    
+    const offscreen = document.createElement('canvas');
+    offscreen.width = boxW;
+    offscreen.height = boxH;
+    const offCtx = offscreen.getContext('2d');
+    
+    if (offCtx) {
+      drawImageCover(offCtx, imageElement, boxW / 2, boxH / 2, boxW, boxH);
+      
+      try {
+        const imageData = offCtx.getImageData(0, 0, boxW, boxH);
+        const data = imageData.data;
+        const gray = new Uint8Array(boxW * boxH);
+        
+        for (let i = 0; i < data.length; i += 4) {
+          gray[i/4] = data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114;
+        }
+
+        for (let y = 0; y < boxH; y++) {
+          for (let x = 0; x < boxW; x++) {
+            const i = y * boxW + x;
+            let edge = 0;
+            
+            if (x < boxW - 1 && y < boxH - 1) {
+              const right = y * boxW + (x + 1);
+              const bottom = (y + 1) * boxW + x;
+              const diffX = Math.abs(gray[i] - gray[right]);
+              const diffY = Math.abs(gray[i] - gray[bottom]);
+              edge = diffX + diffY;
+            }
+            
+            let alpha = 0;
+            
+            // 1. Deep shadows become solid ink
+            if (gray[i] < 70) {
+              alpha = 240; 
+            } 
+            // 2. Midtones get a diagonal hatching effect (like pen strokes)
+            else if (gray[i] < 150) {
+              // Crosshatch pattern based on pixel coordinates
+              if ((x + y) % 4 === 0 || (x - y) % 4 === 0) {
+                alpha = (150 - gray[i]) * 2;
+              }
+            }
+
+            // 3. Edge detection for outlines
+            if (edge > 25) {
+              alpha = Math.max(alpha, 220); // Strong edges
+            } else if (edge > 10) {
+              alpha = Math.max(alpha, edge * 8); // Softer edges
+            }
+            
+            alpha = Math.min(255, alpha);
+            
+            const idx = i * 4;
+            // Vintage Dark Sepia Ink Color
+            data[idx] = 55;     
+            data[idx+1] = 35;   
+            data[idx+2] = 20;   
+            data[idx+3] = alpha; 
+          }
+        }
+        offCtx.putImageData(imageData, 0, 0);
+        
+        ctx.globalAlpha = 0.95;
+        // Blend mode to make it look like ink on paper
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.drawImage(offscreen, boxX, boxY);
+        ctx.globalCompositeOperation = 'source-over';
+        
+      } catch (e) {
+        // Fallback if canvas is tainted (CORS)
+        ctx.filter = 'grayscale(100%) sepia(25%) contrast(115%)';
+        ctx.globalAlpha = 0.90; 
+        drawImageCover(ctx, imageElement, boxX + boxW / 2, boxY + boxH / 2, boxW, boxH);
+      }
+    }
+    
     ctx.restore();
   } else {
     ctx.fillStyle = 'rgba(28, 21, 16, 0.08)';

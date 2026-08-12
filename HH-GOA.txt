@@ -9,3 +9,30 @@
 6.camera access in phone.
 
 7. try to make the 3D background
+
+
+
+
+1. in mobile phone no need of scrolling to preview directly 
+
+2. remove the demo avatar
+
+3. after uploading give the info as uploaded
+
+4.once after clicking generate only the preview should be shown and the customization option should be beneath the preview so the mobile user can easily change it.
+
+5. remove randomize ID
+
+6.builder id must be provided by us and not to be customized by user
+
+7.after the user customization give a button as confirm or any other button that looks attractive only after clicking that button the user might download and share on twitter.
+
+8. let me give u a workflow :
+
+upload or take a live photo(after upload give a indication)
+choose template
+wanted details
+generate button
+after genereate button it comes the preview without download option and only customization
+confirm button
+after confirm button they can download and share on X 
