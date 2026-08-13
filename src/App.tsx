@@ -225,12 +225,12 @@ export default function App() {
   const handleShareToX = () => {
     setHasSharedToX(true);
     const tweetText = `Just generated my Hacker House Goa 2026 ${
-      format === 'pfp' ? 'PFP Frame' : 'Wanted Poster'
+      format === 'pfp' ? 'Avatar' : 'Poster'
     }! Ready to build in Goa, ship from paradise 🌴🚀\n\nBuilder ID: ${badgeId}\nCheck it out: https://hh-goa.vercel.app\n\n@HackerHouseGoa #FrameInGoa`;
     const xUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
-    setTimeout(() => {
-      window.open(xUrl, '_blank');
-    }, 500);
+    
+    window.open(xUrl, '_blank');
+    executeDownload(true);
   };
 
   const handleGenerate = () => {
@@ -357,7 +357,7 @@ export default function App() {
                     </div>
                     <div className="flex flex-col flex-1">
                       <span className="font-bold text-sm tracking-tight font-mono flex items-center justify-between gap-1.5">
-                        Format B: Wanted Poster Blueprint
+                        Format B: Poster
                         {format === 'badge' && <Check className="w-4 h-4 text-[#E5F085]" />}
                       </span>
                       <span className={`text-[10px] font-mono mt-0.5 leading-tight ${format === 'badge' ? 'text-[#FDFBF7]/80' : 'text-[#0F2E1E]/50'}`}>
@@ -383,7 +383,7 @@ export default function App() {
                     </div>
                     <div className="flex flex-col flex-1">
                       <span className="font-bold text-sm tracking-tight font-mono flex items-center justify-between gap-1.5">
-                        Format A: PFP Frame
+                        Format A: Avatar
                         {format === 'pfp' && <Check className="w-4 h-4 text-[#E5F085]" />}
                       </span>
                       <span className={`text-[10px] font-mono mt-0.5 leading-tight ${format === 'pfp' ? 'text-[#FDFBF7]/80' : 'text-[#0F2E1E]/50'}`}>
