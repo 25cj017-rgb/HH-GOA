@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<body>
+    <img id="poster" src="hacker_house_poster.png" style="cursor:crosshair; margin:0; padding:0; display:block;" />
+    <div id="log" style="position:fixed; top:0; left:0; background:rgba(0,0,0,0.8); color:white; padding:10px; font-family:monospace; max-height: 100vh; overflow-y: auto;"></div>
+    <script>
+        document.getElementById('poster').addEventListener('click', function(e) {
+            var x = Math.round(e.offsetX);
+            var y = Math.round(e.offsetY);
+            var log = document.getElementById('log');
+            log.innerHTML += 'Clicked: ' + x + ', ' + y + '<br>';
+            console.log('Clicked', x, y);
+        });
+    </script>
+</body>
+</html>

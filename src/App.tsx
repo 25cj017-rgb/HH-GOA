@@ -6,26 +6,23 @@ import {
   Check, 
   Link as LinkIcon,
   Camera,
-  CheckCircle2
+  CheckCircle2,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
-import { drawPFPFrame, drawIDBadge, type ThemeSettings } from './utils/canvasRenderer';
+import QRCode from 'qrcode';
+import { 
+  drawPFPFrame, 
+  drawIDBadge, 
+  type ThemeSettings,
+  normalizeGithubUrl,
+  isValidGithubUrl,
+  getDeterministicBuilderId
+} from './utils/canvasRenderer';
 import confetti from 'canvas-confetti';
 import { CameraCaptureModal } from './components/CameraCaptureModal';
 import { DownloadSuccessModal } from './components/DownloadSuccessModal';
 import { Background3D } from './components/Background3D';
-
-const BUILDER_CLASSES = [
-  'Terminal Wizard',
-  'Frontend Architect',
-  'Smart Contract Sage',
-  'AI Whisperer',
-  'DevOps Cowboy',
-  'Product Maestro',
-  'Fullstack Ninja',
-  'Pixel Alchemist',
-  'Shitpost Specialist',
-  'Hype Engineer'
-];
 
 const THEMES = [
   { name: 'Goa Retro', bg: '#0F2E1E', primary: '#F6EAD8', accent: '#DE612F' },
@@ -47,17 +44,20 @@ export default function App() {
   const [imageElement, setImageElement] = useState<HTMLImageElement | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+
+
   // Workflow State
   const [isGenerated, setIsGenerated] = useState(false);
 
   // Form State
-  const [name, setName] = useState('');
-  const [role, setRole] = useState('');
-  const [builderClass, setBuilderClass] = useState('Terminal Wizard');
-  const [skills, setSkills] = useState('');
+  const [name, setName] = useState('ATKUL SINGH');
+  const [role, setRole] = useState('Full Stack Developer');
+  const [skills, setSkills] = useState('Python, React, Node');
+  const [venue, setVenue] = useState('Goa, India');
+  const [knownFor, setKnownFor] = useState('Code · Coffee · Repeat');
   const [badgeId, setBadgeId] = useState('');
   
-  const [qrLink, setQrLink] = useState('https://github.com/yourusername');
+  const [qrLink, setQrLink] = useState('https://github.com/atkulsingh');
   const [qrImageElement, setQrImageElement] = useState<HTMLImageElement | null>(null);
 
   // References
@@ -72,11 +72,18 @@ export default function App() {
   // Twitter Gate
   const [hasSharedToX, setHasSharedToX] = useState(false);
 
+  // Automatically update Builder ID deterministically based on GitHub username / link or name
   useEffect(() => {
-    // Generate random 4 digit badge ID on mount
-    const randomId = `#HH26-${Math.floor(1000 + Math.random() * 9000)}`;
-    setBadgeId(randomId);
-  }, []);
+    const seed = qrLink.trim() || name.trim() || 'builder';
+    const deterministicId = getDeterministicBuilderId(seed);
+    setBadgeId(deterministicId);
+  }, [qrLink, name]);
+
+  const handleRegenerateId = () => {
+    const randomSeed = `${qrLink}-${Date.now()}`;
+    const newId = getDeterministicBuilderId(randomSeed);
+    setBadgeId(newId);
+  };
 
   const triggerNativeCamera = () => {
     if (cameraFallbackInputRef.current) {
@@ -84,16 +91,37 @@ export default function App() {
     }
   };
 
+  // Generate QR Code 100% client-side via qrcode package to avoid CORS canvas taint
   useEffect(() => {
     if (!qrLink.trim()) {
       setQrImageElement(null);
       return;
     }
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => setQrImageElement(img);
-    img.onerror = () => setQrImageElement(null);
-    img.src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrLink.trim())}`;
+    const normalizedUrl = normalizeGithubUrl(qrLink);
+    
+    QRCode.toDataURL(normalizedUrl, {
+      width: 250,
+      margin: 1,
+      color: {
+        dark: '#111111',
+        light: '#FFFFFF'
+      }
+    })
+      .then((dataUrl) => {
+        const img = new Image();
+        img.onload = () => setQrImageElement(img);
+        img.onerror = () => setQrImageElement(null);
+        img.src = dataUrl;
+      })
+      .catch((err) => {
+        console.error('Client-side QR generation error, attempting fallback API:', err);
+        const fallbackUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(normalizedUrl)}`;
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => setQrImageElement(img);
+        img.onerror = () => setQrImageElement(null);
+        img.src = fallbackUrl;
+      });
   }, [qrLink]);
 
   useEffect(() => {
@@ -103,23 +131,22 @@ export default function App() {
         document.fonts.ready.then(() => renderCanvas());
       }
     }
-  }, [isGenerated, format, imageElement, name, role, builderClass, skills, badgeId, qrImageElement]);
+  }, [isGenerated, format, imageElement, name, role, skills, venue, knownFor, badgeId, qrImageElement]);
 
   const renderCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Use default values for preview if inputs are empty
     const details = { 
-      name: name || 'Your Name', 
-      role: role || 'Your Role', 
-      builderClass, 
-      skills: skills || 'Your Skills', 
-      badgeId, 
-      qrLink 
+      name: name || 'ATKUL SINGH', 
+      role: role || 'Full Stack Developer', 
+      skills: skills || 'Python, React, Node', 
+      venue: venue || 'Goa, India',
+      knownFor: knownFor || 'Code · Coffee · Repeat',
+      badgeId: badgeId || '#HH26-0000', 
+      qrLink: normalizeGithubUrl(qrLink)
     };
     
-    // Always use the default theme and font
     const themeSettings: ThemeSettings = {
       bg: THEMES[0].bg,
       primary: THEMES[0].primary,
@@ -128,7 +155,7 @@ export default function App() {
     };
 
     if (format === 'pfp') {
-      drawPFPFrame(canvas, imageElement, details, themeSettings);
+      drawPFPFrame(canvas, imageElement, details, qrImageElement, themeSettings);
     } else {
       drawIDBadge(canvas, imageElement, details, qrImageElement, themeSettings);
     }
@@ -196,11 +223,10 @@ export default function App() {
   };
 
   const handleShareToX = () => {
-    executeDownload(false);
     setHasSharedToX(true);
     const tweetText = `Just generated my Hacker House Goa 2026 ${
       format === 'pfp' ? 'PFP Frame' : 'Wanted Poster'
-    }! Ready to build in Goa, ship from paradise 🌴🚀\n\n%23FrameInGoa`;
+    }! Ready to build in Goa, ship from paradise 🌴🚀\n\nBuilder ID: ${badgeId}\nCheck it out: https://hh-goa.vercel.app\n\n@HackerHouseGoa #FrameInGoa`;
     const xUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
     setTimeout(() => {
       window.open(xUrl, '_blank');
@@ -215,6 +241,8 @@ export default function App() {
     setIsGenerated(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const isQrLinkValid = isValidGithubUrl(qrLink);
 
   return (
     <>
@@ -244,7 +272,7 @@ export default function App() {
             <div className="flex flex-col space-y-6">
               <div className="text-center mb-4 flex flex-col items-center bg-[#FDFBF7] border-4 border-[#0F2E1E] p-6 rounded-2xl shadow-[6px_6px_0px_#0F2E1E] transform rotate-1">
                 <span className="text-4xl md:text-5xl font-anton uppercase tracking-tighter text-[#0F2E1E] select-none leading-none">
-                  GENERATE IDENTITY
+                  BUILDER ID GENERATOR
                 </span>
                 <p className="text-xs font-mono mt-2 text-[#0F2E1E]/70 font-bold uppercase tracking-wider">
                   WANTED: DEVELOPERS, DESIGNERS & SHITPOSTERS
@@ -260,7 +288,7 @@ export default function App() {
                   </h3>
                 </div>
 
-                <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex flex-col md:flex-row gap-4 mb-4">
                   <label className={`flex-1 relative flex flex-col items-center justify-center p-6 border-4 border-dashed rounded-xl cursor-pointer transition-all group ${imageSrc ? 'border-[#4CAF50] bg-[#4CAF50]/10' : 'border-[#0F2E1E]/30 hover:border-[#DE612F] bg-[#E5F085]/10 hover:bg-[#E5F085]/20'}`}>
                     <input type="file" accept="image/*,.heic,.heif" onChange={handleImageUpload} className="hidden" />
                     {imageSrc ? (
@@ -303,14 +331,14 @@ export default function App() {
                 </div>
               </section>
 
-              {/* 2. Format Selector card */}
+              {/* 2. Format Selector & Photo Adjuster card */}
               <section className="bg-[#FDFBF7] border-4 border-[#0F2E1E] p-6 rounded-2xl shadow-[4px_4px_0px_#0F2E1E] transition-all">
                 <h3 className="text-md font-anton uppercase tracking-tight text-[#0F2E1E] flex items-center gap-2 mb-4">
                   <span className="w-6 h-6 rounded-full bg-[#DE612F] text-[#FDFBF7] border-2 border-[#0F2E1E] flex items-center justify-center text-xs font-mono">2</span>
                   CHOOSE TEMPLATE FORMAT
                 </h3>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                   <button
                     type="button"
                     onClick={() => setFormat('badge')}
@@ -329,11 +357,11 @@ export default function App() {
                     </div>
                     <div className="flex flex-col flex-1">
                       <span className="font-bold text-sm tracking-tight font-mono flex items-center justify-between gap-1.5">
-                        Format B: Wanted Poster
+                        Format B: Wanted Poster Blueprint
                         {format === 'badge' && <Check className="w-4 h-4 text-[#E5F085]" />}
                       </span>
                       <span className={`text-[10px] font-mono mt-0.5 leading-tight ${format === 'badge' ? 'text-[#FDFBF7]/80' : 'text-[#0F2E1E]/50'}`}>
-                        Vintage woodcut sketch on old paper
+                        Goa palm tree & barcode ID card
                       </span>
                     </div>
                   </button>
@@ -364,14 +392,32 @@ export default function App() {
                     </div>
                   </button>
                 </div>
+
+                {/* Continue Button */}
+                {imageSrc && (
+                  <div className="border-t-2 border-[#0F2E1E]/10 pt-4 mt-6">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = document.getElementById('builder-details-section');
+                        if (el) {
+                          el.scrollIntoView({ behavior: 'smooth' });
+                        }
+                      }}
+                      className="w-full mt-2 py-4 bg-[#0F2E1E] hover:bg-[#DE612F] text-[#FDFBF7] font-anton uppercase tracking-widest text-lg rounded-xl border-3 border-[#0F2E1E] shadow-[4px_4px_0px_#DE612F] hover:shadow-[4px_4px_0px_#0F2E1E] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all flex items-center justify-center gap-3 cursor-pointer"
+                    >
+                      <Check className="w-5 h-5 stroke-[3px]" /> Save Photo & Continue To Details
+                    </button>
+                  </div>
+                )}
               </section>
 
               {/* 3. Form Input Details card */}
-              <section className="bg-[#FDFBF7] border-4 border-[#0F2E1E] p-6 rounded-2xl shadow-[4px_4px_0px_#0F2E1E] transition-all">
+              <section id="builder-details-section" className="bg-[#FDFBF7] border-4 border-[#0F2E1E] p-6 rounded-2xl shadow-[4px_4px_0px_#0F2E1E] transition-all">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-md font-anton uppercase tracking-tight text-[#0F2E1E] flex items-center gap-2">
                     <span className="w-6 h-6 rounded-full bg-[#DE612F] text-[#FDFBF7] border-2 border-[#0F2E1E] flex items-center justify-center text-xs font-mono">3</span>
-                    WANTED POSTER DETAILS
+                    BUILDER ID DETAILS
                   </h3>
                 </div>
 
@@ -382,63 +428,110 @@ export default function App() {
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      maxLength={24}
-                      placeholder="Enter your name"
-                      className="bg-[#FDFBF7] border-3 border-[#0F2E1E] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#DE612F] transition-all text-[#0F2E1E] font-mono font-bold shadow-[2px_2px_0px_#0F2E1E]"
-                    />
-                  </div>
-
-                  <div className="flex flex-col space-y-1">
-                    <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold flex items-center gap-1">
-                      <LinkIcon className="w-3.5 h-3.5 text-[#DE612F]" /> Scannable QR Code (e.g. GitHub Link)
-                    </label>
-                    <input
-                      type="text"
-                      value={qrLink}
-                      onChange={(e) => setQrLink(e.target.value)}
-                      placeholder="https://github.com/yourusername"
+                      maxLength={36}
+                      placeholder="e.g. ATKUL SINGH"
                       className="bg-[#FDFBF7] border-3 border-[#0F2E1E] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#DE612F] transition-all text-[#0F2E1E] font-mono font-bold shadow-[2px_2px_0px_#0F2E1E]"
                     />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="flex flex-col space-y-1">
-                      <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold">Primary Role / Title</label>
+                      <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold">Role</label>
                       <input
                         type="text"
                         value={role}
                         onChange={(e) => setRole(e.target.value)}
-                        maxLength={24}
-                        placeholder="e.g. Software Developer"
+                        maxLength={40}
+                        placeholder="e.g. Full Stack Developer"
                         className="bg-[#FDFBF7] border-3 border-[#0F2E1E] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#DE612F] transition-all text-[#0F2E1E] font-mono font-bold shadow-[2px_2px_0px_#0F2E1E]"
                       />
                     </div>
-                    <div className="flex flex-col space-y-1">
-                      <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold">Builder Class / Persona</label>
-                      <select
-                        value={builderClass}
-                        onChange={(e) => setBuilderClass(e.target.value)}
-                        className="bg-[#FDFBF7] border-3 border-[#0F2E1E] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#DE612F] transition-all text-[#0F2E1E] font-mono font-bold shadow-[2px_2px_0px_#0F2E1E]"
-                      >
-                        {BUILDER_CLASSES.map((cls, idx) => (
-                          <option key={idx} value={cls}>{cls}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
 
-                  <div className="grid grid-cols-1 gap-4">
                     <div className="flex flex-col space-y-1">
-                      <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold">Tech Stack / Skills</label>
+                      <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold">Tech Stack</label>
                       <input
                         type="text"
                         value={skills}
                         onChange={(e) => setSkills(e.target.value)}
-                        maxLength={32}
-                        placeholder="e.g. React, Node, Rust"
+                        maxLength={50}
+                        placeholder="e.g. Python, React, Node"
                         className="bg-[#FDFBF7] border-3 border-[#0F2E1E] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#DE612F] transition-all text-[#0F2E1E] font-mono font-bold shadow-[2px_2px_0px_#0F2E1E]"
                       />
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex flex-col space-y-1">
+                      <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold">Venue</label>
+                      <input
+                        type="text"
+                        value={venue}
+                        onChange={(e) => setVenue(e.target.value)}
+                        maxLength={30}
+                        placeholder="e.g. Goa, India"
+                        className="bg-[#FDFBF7] border-3 border-[#0F2E1E] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#DE612F] transition-all text-[#0F2E1E] font-mono font-bold shadow-[2px_2px_0px_#0F2E1E]"
+                      />
+                    </div>
+
+                    <div className="flex flex-col space-y-1">
+                      <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold">Known For</label>
+                      <select
+                        value={knownFor}
+                        onChange={(e) => setKnownFor(e.target.value)}
+                        className="bg-[#FDFBF7] border-3 border-[#0F2E1E] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#DE612F] transition-all text-[#0F2E1E] font-mono font-bold shadow-[2px_2px_0px_#0F2E1E] cursor-pointer"
+                      >
+                        <option value="Code · Coffee · Repeat">Code · Coffee · Repeat</option>
+                        <option value="Sleep is Optional">Sleep is Optional</option>
+                        <option value="Full-Time Debugger, Part-Time Human">Full-Time Debugger, Part-Time Human</option>
+                        <option value="Deadline Expert">Deadline Expert</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col space-y-1">
+                    <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold flex flex-col md:flex-row md:items-center justify-between gap-1 mb-1">
+                      <span className="flex items-center gap-1 shrink-0">
+                        <LinkIcon className="w-3.5 h-3.5 text-[#DE612F]" /> GitHub Profile URL (Auto-generates QR)
+                      </span>
+                      {isQrLinkValid ? (
+                        <span className="text-[10px] text-[#4CAF50] flex items-center gap-1 font-bold shrink-0 md:justify-end">
+                          <CheckCircle2 className="w-3 h-3" /> Valid Link
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-[#DE612F] flex items-center gap-1 font-bold shrink-0 md:justify-end">
+                          <AlertCircle className="w-3 h-3" /> Enter valid URL
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      type="text"
+                      value={qrLink}
+                      onChange={(e) => setQrLink(e.target.value)}
+                      maxLength={100}
+                      placeholder="e.g. atkulsingh or https://github.com/atkulsingh"
+                      className={`bg-[#FDFBF7] border-3 rounded-xl px-4 py-2.5 text-sm focus:outline-none transition-all text-[#0F2E1E] font-mono font-bold shadow-[2px_2px_0px_#0F2E1E] ${
+                        isQrLinkValid ? 'border-[#0F2E1E] focus:border-[#4CAF50]' : 'border-[#DE612F] focus:border-[#DE612F]'
+                      }`}
+                    />
+                  </div>
+
+                  <div className="flex flex-col space-y-1">
+                    <label className="text-xs font-mono uppercase tracking-wider text-[#0F2E1E]/80 font-bold flex items-center justify-between">
+                      <span>Unique Builder ID & Barcode</span>
+                      <button 
+                        type="button" 
+                        onClick={handleRegenerateId}
+                        className="text-[11px] text-[#DE612F] hover:underline flex items-center gap-1 font-bold"
+                      >
+                        <RefreshCw className="w-3 h-3" /> Regenerate ID
+                      </button>
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={badgeId}
+                      className="bg-[#E5F085]/30 border-3 border-[#0F2E1E] rounded-xl px-4 py-2.5 text-sm text-[#0F2E1E] font-mono font-bold shadow-[2px_2px_0px_#0F2E1E] cursor-not-allowed"
+                    />
                   </div>
                 </div>
 
@@ -474,15 +567,31 @@ export default function App() {
                     ref={canvasRef} 
                     className="max-w-full rounded border-2 border-[#0F2E1E] shadow-md object-contain bg-[#0F2E1E]" 
                     style={{
-                      maxHeight: format === 'badge' ? '500px' : '400px',
+                      maxHeight: format === 'badge' ? '550px' : '450px',
                       aspectRatio: format === 'badge' ? '2/3' : '1/1'
                     }}
                   />
                 </div>
+
+                {/* Save Button directly after the Live Preview canvas */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById('ready-to-ship-section');
+                    if (el) {
+                      el.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  }}
+                  className="w-full mt-5 py-4 bg-[#E5F085] hover:bg-[#4CAF50] text-[#0F2E1E] hover:text-white font-anton uppercase tracking-widest text-xl rounded-xl border-3 border-[#0F2E1E] shadow-[4px_4px_0px_#0F2E1E] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0px_#0F2E1E] transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-6 h-6 stroke-[2.5]" /> SAVE
+                </button>
+
+
               </div>
 
               {/* DOWNLOAD & SHARE */}
-              <section className="bg-[#FDFBF7] border-4 border-[#0F2E1E] p-6 rounded-2xl shadow-[4px_4px_0px_#0F2E1E] transition-all text-center">
+              <section id="ready-to-ship-section" className="bg-[#FDFBF7] border-4 border-[#0F2E1E] p-6 rounded-2xl shadow-[4px_4px_0px_#0F2E1E] transition-all text-center">
                 <h3 className="text-lg font-anton uppercase tracking-tight text-[#0F2E1E] mb-2">
                   READY TO SHIP
                 </h3>
